@@ -1,0 +1,10 @@
+streamlit==1.35.0
+pandas
+requests
+numpy
+openpyxl
+simplekml
+folium
+streamlit-folium
+xlsxwriter
+xlrd
