@@ -9,7 +9,8 @@ from fastapi.exceptions import RequestValidationError
 import logging
 
 from app.core.config import settings
-from app.core.database import init_db, close_db, AsyncSessionLocal
+from app.core.database import init_db, close_db
+from app.core import database
 from app.api.routes import auth_router, admin_router, aneel_router
 from app.services.auth_service import AuthService
 
@@ -52,7 +53,7 @@ async def lifespan(app: FastAPI):
     try:
         # Criar admin padrão
         logger.info("[STARTUP] Verificando usuário admin...")
-        async with AsyncSessionLocal() as session:
+        async with database.AsyncSessionLocal() as session:
             admin = await AuthService.create_admin_user(session)
             if admin:
                 logger.info(f"[STARTUP] ✓ Usuário admin disponível: {admin.email}")
