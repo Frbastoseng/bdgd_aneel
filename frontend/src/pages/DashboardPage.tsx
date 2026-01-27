@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/authStore'
 import { aneelApi, adminApi } from '@/services/api'
+import { toast } from 'react-hot-toast'
 import {
   ChartBarIcon,
   UsersIcon,
@@ -11,12 +12,14 @@ import {
   ArrowTrendingUpIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline'
 import { Link } from 'react-router-dom'
 
 export default function DashboardPage() {
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
+  const queryClient = useQueryClient()
   
   const { data: statusDados } = useQuery({
     queryKey: ['status-dados'],
@@ -27,6 +30,21 @@ export default function DashboardPage() {
     queryKey: ['admin-stats'],
     queryFn: adminApi.stats,
     enabled: isAdmin,
+  })
+  
+  // Mutation para atualizar dados - apenas admin
+  const atualizarDadosMutation = useMutation({
+    mutationFn: aneelApi.atualizarDados,
+    onSuccess: () => {
+      toast.success('Atualização iniciada! Os dados serão baixados em background.')
+      // Aguardar um pouco e atualizar o status
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['status-dados'] })
+      }, 5000)
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Erro ao atualizar dados')
+    }
   })
   
   return (
@@ -131,17 +149,33 @@ export default function DashboardPage() {
             <h2 className="text-lg font-display font-bold text-gray-900">
               Status dos Dados ANEEL
             </h2>
-            <div className={clsx(
-              'status-indicator',
-              statusDados?.disponivel ? 'text-green-600' : 'text-yellow-600'
-            )}>
-              <span className={clsx(
-                'status-dot',
-                statusDados?.disponivel ? 'status-dot-success' : 'status-dot-warning'
-              )} />
-              <span className="text-sm font-medium">
-                {statusDados?.disponivel ? 'Disponível' : 'Indisponível'}
-              </span>
+            <div className="flex items-center gap-4">
+              {/* Botão Atualizar - apenas admin */}
+              {isAdmin && (
+                <button
+                  onClick={() => atualizarDadosMutation.mutate()}
+                  disabled={atualizarDadosMutation.isPending}
+                  className="btn-primary flex items-center gap-2 text-sm"
+                >
+                  <ArrowPathIcon className={clsx(
+                    "w-4 h-4",
+                    atualizarDadosMutation.isPending && "animate-spin"
+                  )} />
+                  {atualizarDadosMutation.isPending ? 'Atualizando...' : 'Atualizar Dados'}
+                </button>
+              )}
+              <div className={clsx(
+                'status-indicator',
+                statusDados?.disponivel ? 'text-green-600' : 'text-yellow-600'
+              )}>
+                <span className={clsx(
+                  'status-dot',
+                  statusDados?.disponivel ? 'status-dot-success' : 'status-dot-warning'
+                )} />
+                <span className="text-sm font-medium">
+                  {statusDados?.disponivel ? 'Disponível' : 'Indisponível'}
+                </span>
+              </div>
             </div>
           </div>
         </div>
