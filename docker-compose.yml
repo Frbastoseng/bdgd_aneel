@@ -7,18 +7,20 @@ services:
     container_name: bdgd_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DB_USER:-bdgd}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-bdgd_secret_2024}
-      POSTGRES_DB: ${DB_NAME:-bdgd_pro}
+      POSTGRES_USER: ${DB_USER:-bdgd_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-BdGd@Secure2026!}
+      POSTGRES_DB: ${DB_NAME:-bdgd_aneel_prod}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5434:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-bdgd} -d ${DB_NAME:-bdgd_pro}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-bdgd_user} -d ${DB_NAME:-bdgd_aneel_prod}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - bdgd_network
 
   # Redis Cache
   redis:
@@ -26,7 +28,7 @@ services:
     container_name: bdgd_redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6381:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
@@ -35,6 +37,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - bdgd_network
 
   # FastAPI Backend
   backend:
@@ -49,23 +53,28 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - APP_NAME=BDGD Pro
+      - APP_NAME=${APP_NAME:-BDGD Pro}
       - SECRET_KEY=${SECRET_KEY:-your-super-secret-key-change-in-production}
-      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-bdgd}:${DB_PASSWORD:-bdgd_secret_2024}@db:5432/${DB_NAME:-bdgd_pro}
-      - REDIS_URL=redis://redis:6379/0
-      - CORS_ORIGINS=http://localhost,http://localhost:80,http://localhost:3000
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@bdgdpro.com}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123456}
-      - DEBUG=false
+      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-bdgd_user}:${DB_PASSWORD:-BdGd@Secure2026!}@${DB_HOST:-bdgd_db}:${DB_PORT:-5432}/${DB_NAME:-bdgd_aneel_prod}
+      - DATABASE_URL_SYNC=postgresql://${DB_USER:-bdgd_user}:${DB_PASSWORD:-BdGd@Secure2026!}@${DB_HOST:-bdgd_db}:${DB_PORT:-5432}/${DB_NAME:-bdgd_aneel_prod}
+      - REDIS_URL=redis://bdgd_redis:6379/0
+      - CORS_ORIGINS=https://bdgd.btstech.com.br,http://localhost,http://localhost:80,http://localhost:3000,http://localhost:8080
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@bdgd.btstech.com.br}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin@Bdgd2026!}
+      - DEBUG=${DEBUG:-false}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
     volumes:
       - ./data:/app/data
     ports:
       - "8000:8000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    networks:
+      - bdgd_network
+    # healthcheck desabilitado para evitar reinicializações durante debug
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
 
   # React Frontend
   frontend:
@@ -80,7 +89,9 @@ services:
     depends_on:
       - backend
     ports:
-      - "80:80"
+      - "8080:80"
+    networks:
+      - bdgd_network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -89,8 +100,11 @@ services:
 
 volumes:
   postgres_data:
+    name: bdgd_aneel_postgres_data
   redis_data:
+    name: bdgd_aneel_redis_data
 
 networks:
-  default:
+  bdgd_network:
     name: bdgd_network
+    driver: bridge

@@ -17,12 +17,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY alembic/ ./alembic/
 COPY alembic.ini .
+COPY .env .
+COPY wait_for_db.py .
+COPY entrypoint_simple.sh /app/entrypoint.sh
 
 # Criar diretório de dados
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data && chmod +x /app/entrypoint.sh /app/wait_for_db.py
 
 # Expor porta
 EXPOSE 8000
 
 # Comando de inicialização
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/app/entrypoint.sh"]

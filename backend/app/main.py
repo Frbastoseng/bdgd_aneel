@@ -13,35 +13,64 @@ from app.core.database import init_db, close_db, AsyncSessionLocal
 from app.api.routes import auth_router, admin_router, aneel_router
 from app.services.auth_service import AuthService
 
-# Configurar logging
+# Configurar logging com mais detalhes
 logging.basicConfig(
     level=logging.DEBUG if settings.DEBUG else logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
+# Log de inicialização com informações de configuração
+logger.info("="*80)
+logger.info(f"BDGD Pro - Inicializando aplicação")
+logger.info(f"Ambiente: {settings.ENVIRONMENT}")
+logger.info(f"Debug: {settings.DEBUG}")
+logger.info(f"Database URL: {settings.DATABASE_URL[:50]}...")
+logger.info(f"Redis URL: {settings.REDIS_URL}")
+logger.info(f"CORS Origins: {settings.allowed_origins_list}")
+logger.info("="*80)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Gerenciamento do ciclo de vida da aplicação"""
     # Startup
-    logger.info("Iniciando aplicação BDGD Pro...")
+    logger.info("="*80)
+    logger.info("[STARTUP] Iniciando aplicação BDGD Pro...")
+    logger.info(f"[STARTUP] Versão: {settings.APP_VERSION}")
+    logger.info(f"[STARTUP] Ambiente: {settings.ENVIRONMENT}")
     
-    # Inicializar banco de dados
-    await init_db()
-    logger.info("Banco de dados inicializado")
+    try:
+        # Inicializar banco de dados
+        logger.info("[STARTUP] Conectando ao banco de dados...")
+        await init_db()
+        logger.info("[STARTUP] ✓ Banco de dados inicializado com sucesso")
+    except Exception as e:
+        logger.error(f"[STARTUP] ✗ Erro ao inicializar banco de dados: {e}", exc_info=True)
+        raise
     
-    # Criar admin padrão
-    async with AsyncSessionLocal() as session:
-        admin = await AuthService.create_admin_user(session)
-        if admin:
-            logger.info(f"Usuário admin disponível: {admin.email}")
+    try:
+        # Criar admin padrão
+        logger.info("[STARTUP] Verificando usuário admin...")
+        async with AsyncSessionLocal() as session:
+            admin = await AuthService.create_admin_user(session)
+            if admin:
+                logger.info(f"[STARTUP] ✓ Usuário admin disponível: {admin.email}")
+            else:
+                logger.warning("[STARTUP] ⚠ Usuário admin não foi criado")
+    except Exception as e:
+        logger.error(f"[STARTUP] ✗ Erro ao criar admin: {e}", exc_info=True)
     
+    logger.info("[STARTUP] ✓ Aplicação iniciada com sucesso")
+    logger.info("="*80)
     yield
     
     # Shutdown
-    logger.info("Encerrando aplicação...")
+    logger.info("="*80)
+    logger.info("[SHUTDOWN] Encerrando aplicação...")
     await close_db()
+    logger.info("[SHUTDOWN] ✓ Aplicação encerrada")
+    logger.info("="*80)
 
 
 # Criar aplicação
