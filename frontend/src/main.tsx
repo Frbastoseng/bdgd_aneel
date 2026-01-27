@@ -10,7 +10,13 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
-      staleTime: 5 * 60 * 1000, // 5 minutos
+      staleTime: 10 * 60 * 1000, // 10 minutos - dados considerados frescos
+      gcTime: 30 * 60 * 1000, // 30 minutos - tempo no cache (antigo cacheTime)
+      refetchOnMount: false, // Não refetch ao montar se dados estiverem no cache
+      refetchOnReconnect: false, // Não refetch ao reconectar
+    },
+    mutations: {
+      retry: 1,
     },
   },
 })

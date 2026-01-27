@@ -22,19 +22,38 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
+// Flag para evitar múltiplos refreshes simultâneos
+let isRefreshing = false
+let refreshSubscribers: ((token: string) => void)[] = []
+
+function subscribeTokenRefresh(cb: (token: string) => void) {
+  refreshSubscribers.push(cb)
+}
+
+function onRefreshed(token: string) {
+  refreshSubscribers.forEach(cb => cb(token))
+  refreshSubscribers = []
+}
+
 // Interceptor para tratar erros
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
     
-    // Se token expirou, tenta refresh
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // URLs que não devem tentar refresh
+    const noRefreshUrls = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout']
+    const isAuthUrl = noRefreshUrls.some(url => originalRequest?.url?.includes(url))
+    
+    // Se token expirou e não é uma URL de auth
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthUrl) {
       originalRequest._retry = true
       
       const refreshToken = useAuthStore.getState().refreshToken
       
-      if (refreshToken) {
+      if (refreshToken && !isRefreshing) {
+        isRefreshing = true
+        
         try {
           const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
             refresh_token: refreshToken,
@@ -43,14 +62,48 @@ api.interceptors.response.use(
           const { access_token, refresh_token } = response.data
           useAuthStore.getState().setTokens(access_token, refresh_token)
           
+          isRefreshing = false
+          onRefreshed(access_token)
+          
           originalRequest.headers.Authorization = `Bearer ${access_token}`
           return api(originalRequest)
         } catch (refreshError) {
-          useAuthStore.getState().logout()
-          window.location.href = '/login'
+          isRefreshing = false
+          refreshSubscribers = []
+          
+          // Limpar estado e parar o loop
+          useAuthStore.setState({
+            user: null,
+            token: null,
+            refreshToken: null,
+            isAuthenticated: false,
+          })
+          
+          // Só redireciona se não estiver já na página de login
+          if (!window.location.pathname.includes('/login')) {
+            window.location.href = '/login'
+          }
           return Promise.reject(refreshError)
         }
+      } else if (isRefreshing) {
+        // Se já está fazendo refresh, aguarda o token novo
+        return new Promise((resolve) => {
+          subscribeTokenRefresh((token: string) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`
+            resolve(api(originalRequest))
+          })
+        })
       }
+    }
+    
+    // Se é 401 em URLs de auth, apenas limpa o estado sem redirecionar
+    if (error.response?.status === 401 && isAuthUrl) {
+      useAuthStore.setState({
+        user: null,
+        token: null,
+        refreshToken: null,
+        isAuthenticated: false,
+      })
     }
     
     return Promise.reject(error)

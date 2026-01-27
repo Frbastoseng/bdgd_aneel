@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useMemo, memo } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { Loader } from '@googlemaps/js-api-loader'
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import { aneelApi } from '@/services/api'
-import type { FiltroConsulta, ConsultaResponse, OpcoesFiltros } from '@/types'
+import type { FiltroConsulta, ConsultaResponse, OpcoesFiltros, ClienteANEEL } from '@/types'
 import toast from 'react-hot-toast'
 import {
   MagnifyingGlassIcon,
@@ -13,8 +15,99 @@ import {
   MapPinIcon,
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
+import { useDebounce } from '@/hooks/usePerformance'
+import { TableSkeleton, MapSkeleton } from '@/components/Skeleton'
 
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+// Ícones customizados para Leaflet
+const createCustomIcon = (color: string) => L.divIcon({
+  className: 'custom-marker',
+  html: `<div style="
+    width: 24px;
+    height: 24px;
+    background-color: ${color};
+    border: 3px solid white;
+    border-radius: 50%;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  "></div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+  popupAnchor: [0, -12],
+})
+
+const solarIcon = createCustomIcon('#22c55e')
+const normalIcon = createCustomIcon('#3b82f6')
+
+// Função para gerar link do Google Maps Street View
+const getStreetViewUrl = (lat: number, lng: number) => {
+  return `https://www.google.com/maps/@${lat},${lng},3a,75y,90t/data=!3m6!1e1!3m4!1s!2e0!7i16384!8i8192?entry=ttu`
+}
+
+// Componente memoizado para linha da tabela (evita re-renders)
+const TableRow = memo(({ cliente }: { cliente: ClienteANEEL }) => {
+  const lat = cliente.point_y || cliente.latitude
+  const lng = cliente.point_x || cliente.longitude
+  const hasCoords = lat && lng
+  
+  return (
+    <tr className="hover:bg-blue-50 transition-colors">
+      <td className="px-2 py-1.5 text-xs font-semibold text-gray-900">
+        {cliente.nome_uf || '-'}
+      </td>
+      <td className="px-2 py-1.5 text-xs text-gray-800">
+        {cliente.nome_municipio || cliente.mun || '-'}
+      </td>
+      <td className="px-2 py-1.5 text-xs text-gray-600">
+        {cliente.clas_sub_descricao || cliente.clas_sub || '-'}
+      </td>
+      <td className="px-2 py-1.5 text-xs text-gray-600 font-medium">
+        {cliente.gru_tar || '-'}
+      </td>
+      <td className="px-2 py-1.5 text-xs text-center">
+        <span className={clsx(
+          'px-1.5 py-0.5 rounded text-xs font-medium',
+          cliente.liv === 1 ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
+        )}>
+          {cliente.liv === 1 ? 'Livre' : cliente.liv === 0 ? 'Cativo' : '-'}
+        </span>
+      </td>
+      <td className="px-2 py-1.5 text-xs text-right font-mono font-semibold text-green-700">
+        {cliente.dem_cont?.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) || '-'}
+      </td>
+      <td className="px-2 py-1.5 text-xs text-right font-mono text-gray-600">
+        {cliente.car_inst?.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) || '-'}
+      </td>
+      <td className="px-2 py-1.5 text-xs text-right font-mono font-semibold text-blue-700">
+        {cliente.ene_max?.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) || '-'}
+      </td>
+      <td className="px-2 py-1.5 text-center">
+        <span className={clsx(
+          'inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold',
+          cliente.possui_solar 
+            ? 'bg-green-100 text-green-700' 
+            : 'bg-red-50 text-red-400'
+        )}>
+          {cliente.possui_solar ? '☀️' : '—'}
+        </span>
+      </td>
+      <td className="px-2 py-1.5 text-center">
+        {hasCoords ? (
+          <a
+            href={getStreetViewUrl(Number(lat), Number(lng))}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold rounded text-xs transition-colors"
+            title={`Ver no Street View: ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`}
+          >
+            🚶 Ver
+          </a>
+        ) : (
+          <span className="text-gray-300 text-xs">—</span>
+        )}
+      </td>
+    </tr>
+  )
+})
+TableRow.displayName = 'TableRow'
 
 export default function ConsultaPage() {
   const [showFilters, setShowFilters] = useState(true)
@@ -31,21 +124,29 @@ export default function ConsultaPage() {
   const [energiaOperador, setEnergiaOperador] = useState<'Todos' | 'Maior que' | 'Menor que'>('Todos')
   const [energiaValor, setEnergiaValor] = useState<number>(0)
 
-  // Filtros de busca por texto
+  // Filtros de busca por texto com debounce para melhor performance
   const [searchMunicipio, setSearchMunicipio] = useState('')
   const [searchMicrorregiao, setSearchMicrorregiao] = useState('')
   const [searchMesorregiao, setSearchMesorregiao] = useState('')
   const [searchClasse, setSearchClasse] = useState('')
   const [searchGrupo, setSearchGrupo] = useState('')
+  
+  // Aplicar debounce nos valores de busca (300ms de delay)
+  const debouncedSearchMunicipio = useDebounce(searchMunicipio, 200)
+  const debouncedSearchMicrorregiao = useDebounce(searchMicrorregiao, 200)
+  const debouncedSearchMesorregiao = useDebounce(searchMesorregiao, 200)
+  const debouncedSearchClasse = useDebounce(searchClasse, 200)
+  const debouncedSearchGrupo = useDebounce(searchGrupo, 200)
 
-  // Mapa
-  const mapContainerRef = useRef<HTMLDivElement>(null)
-  const streetViewContainerRef = useRef<HTMLDivElement>(null)
-  const [map, setMap] = useState<google.maps.Map | null>(null)
-  const [streetView, setStreetView] = useState<google.maps.StreetViewPanorama | null>(null)
-  const [markers, setMarkers] = useState<google.maps.Marker[]>([])
-  const [mapLoaded, setMapLoaded] = useState(false)
-  const [showStreetView, setShowStreetView] = useState(false)
+  // Pontos válidos para o mapa - memoizado
+  const pontosValidos = useMemo(() => {
+    if (!resultados?.dados) return []
+    return resultados.dados.filter((cliente) => {
+      const lat = cliente.point_y || cliente.latitude
+      const lng = cliente.point_x || cliente.longitude
+      return lat && lng
+    })
+  }, [resultados])
   
   const { register, handleSubmit, reset, getValues } = useForm<FiltroConsulta>({
     defaultValues: {
@@ -199,170 +300,71 @@ export default function ConsultaPage() {
     ? opcoesFiltros.mesorregioes_por_uf[selectedUf]
     : opcoesFiltros?.mesorregioes || []
 
-  // Filtrar opções com base na busca por texto
+  // Filtrar opções com base na busca por texto (usando valores debounced)
   const filteredMunicipios = useMemo(() => {
-    if (!searchMunicipio.trim()) return municipiosOptions
-    const search = searchMunicipio.toLowerCase()
-    return municipiosOptions.filter((m) => m.toLowerCase().includes(search))
-  }, [municipiosOptions, searchMunicipio])
+    if (!debouncedSearchMunicipio.trim()) return municipiosOptions.slice(0, 100)
+    const search = debouncedSearchMunicipio.toLowerCase()
+    return municipiosOptions.filter((m) => m.toLowerCase().includes(search)).slice(0, 100)
+  }, [municipiosOptions, debouncedSearchMunicipio])
 
   const filteredMicrorregioes = useMemo(() => {
-    if (!searchMicrorregiao.trim()) return microrregioesOptions
-    const search = searchMicrorregiao.toLowerCase()
-    return microrregioesOptions.filter((m) => m.toLowerCase().includes(search))
-  }, [microrregioesOptions, searchMicrorregiao])
+    if (!debouncedSearchMicrorregiao.trim()) return microrregioesOptions.slice(0, 50)
+    const search = debouncedSearchMicrorregiao.toLowerCase()
+    return microrregioesOptions.filter((m) => m.toLowerCase().includes(search)).slice(0, 50)
+  }, [microrregioesOptions, debouncedSearchMicrorregiao])
 
   const filteredMesorregioes = useMemo(() => {
-    if (!searchMesorregiao.trim()) return mesorregioesOptions
-    const search = searchMesorregiao.toLowerCase()
-    return mesorregioesOptions.filter((m) => m.toLowerCase().includes(search))
-  }, [mesorregioesOptions, searchMesorregiao])
+    if (!debouncedSearchMesorregiao.trim()) return mesorregioesOptions.slice(0, 50)
+    const search = debouncedSearchMesorregiao.toLowerCase()
+    return mesorregioesOptions.filter((m) => m.toLowerCase().includes(search)).slice(0, 50)
+  }, [mesorregioesOptions, debouncedSearchMesorregiao])
 
   const filteredClasses = useMemo(() => {
     const classes = opcoesFiltros?.classes_cliente || []
-    if (!searchClasse.trim()) return classes
-    const search = searchClasse.toLowerCase()
+    if (!debouncedSearchClasse.trim()) return classes
+    const search = debouncedSearchClasse.toLowerCase()
     return classes.filter((c) => c.toLowerCase().includes(search))
-  }, [opcoesFiltros?.classes_cliente, searchClasse])
+  }, [opcoesFiltros?.classes_cliente, debouncedSearchClasse])
 
   const filteredGrupos = useMemo(() => {
     const grupos = opcoesFiltros?.grupos_tarifarios || []
-    if (!searchGrupo.trim()) return grupos
-    const search = searchGrupo.toLowerCase()
+    if (!debouncedSearchGrupo.trim()) return grupos
+    const search = debouncedSearchGrupo.toLowerCase()
     return grupos.filter((g) => g.toLowerCase().includes(search))
-  }, [opcoesFiltros?.grupos_tarifarios, searchGrupo])
+  }, [opcoesFiltros?.grupos_tarifarios, debouncedSearchGrupo])
 
-  // Inicializar Google Maps quando houver resultados
-  useEffect(() => {
-    if (!resultados || !mapContainerRef.current || mapLoaded) return
-    if (!GOOGLE_MAPS_API_KEY) return
-
-    const loader = new Loader({
-      apiKey: GOOGLE_MAPS_API_KEY,
-      version: 'weekly',
-      libraries: ['places'],
-    })
-
-    loader.load().then(() => {
-      if (!mapContainerRef.current) return
-
-      const mapInstance = new google.maps.Map(mapContainerRef.current, {
-        center: { lat: -15.7801, lng: -47.9292 },
-        zoom: 4,
-        mapTypeControl: true,
-        streetViewControl: true,
-        fullscreenControl: true,
-      })
-
-      setMap(mapInstance)
-      setMapLoaded(true)
-
-      if (streetViewContainerRef.current) {
-        const streetViewInstance = new google.maps.StreetViewPanorama(streetViewContainerRef.current, {
-          position: { lat: -15.7801, lng: -47.9292 },
-          pov: { heading: 0, pitch: 0 },
-          visible: false,
-        })
-        mapInstance.setStreetView(streetViewInstance)
-        setStreetView(streetViewInstance)
-      }
-    }).catch((err) => {
-      console.error('Erro ao carregar Google Maps:', err)
-    })
-  }, [resultados, mapLoaded])
-
-  // Atualizar marcadores quando resultados mudarem
-  useEffect(() => {
-    if (!map || !resultados?.dados) return
-
-    // Limpar marcadores anteriores
-    markers.forEach((marker) => marker.setMap(null))
-
-    const newMarkers: google.maps.Marker[] = []
-    const bounds = new google.maps.LatLngBounds()
-    let pontosValidos = 0
-
-    resultados.dados.forEach((cliente) => {
-      const lat = cliente.point_y || cliente.latitude
-      const lng = cliente.point_x || cliente.longitude
-      
-      if (!lat || !lng) return
-      
-      pontosValidos++
-      const position = { lat: Number(lat), lng: Number(lng) }
-
-      const marker = new google.maps.Marker({
-        position,
-        map,
-        title: `Demanda: ${cliente.dem_cont || 'N/A'} kW`,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 8,
-          fillColor: cliente.possui_solar ? '#22c55e' : '#3b82f6',
-          fillOpacity: 0.8,
-          strokeColor: '#ffffff',
-          strokeWeight: 2,
-        },
-      })
-
-      const infoContent = `
-        <div style="padding: 8px; min-width: 200px;">
-          <h3 style="margin: 0 0 8px 0; font-weight: 600;">
-            ${cliente.nome_municipio || cliente.mun || 'Cliente'}
-          </h3>
-          <div style="font-size: 12px; color: #666;">
-            <div><strong>UF:</strong> ${cliente.nome_uf || '-'}</div>
-            <div><strong>Classe:</strong> ${cliente.clas_sub_descricao || cliente.clas_sub || '-'}</div>
-            <div><strong>Grupo Tarifário:</strong> ${cliente.gru_tar || '-'}</div>
-            <div><strong>Demanda:</strong> ${cliente.dem_cont?.toLocaleString('pt-BR') || '-'} kW</div>
-            <div><strong>Energia Máx:</strong> ${cliente.ene_max?.toLocaleString('pt-BR') || '-'} kWh</div>
-            <div><strong>Solar:</strong> ${cliente.possui_solar ? '✅ Sim' : '❌ Não'}</div>
-          </div>
-          <div style="margin-top: 8px; font-size: 11px; color: #888;">
-            📍 ${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}
-          </div>
-        </div>
-      `
-
-      const infoWindow = new google.maps.InfoWindow({ content: infoContent })
-      marker.addListener('click', () => infoWindow.open(map, marker))
-
-      newMarkers.push(marker)
-      bounds.extend(position)
-    })
-
-    setMarkers(newMarkers)
-
-    if (newMarkers.length > 0) {
-      map.fitBounds(bounds)
-      const listener = google.maps.event.addListener(map, 'idle', () => {
-        if (map.getZoom()! > 15) map.setZoom(15)
-        google.maps.event.removeListener(listener)
-      })
+  // Calcular centro do mapa baseado nos pontos
+  const mapCenter = useMemo(() => {
+    if (pontosValidos.length === 0) return { lat: -15.7801, lng: -47.9292 }
+    const lats = pontosValidos.map(c => Number(c.point_y || c.latitude))
+    const lngs = pontosValidos.map(c => Number(c.point_x || c.longitude))
+    return {
+      lat: lats.reduce((a, b) => a + b, 0) / lats.length,
+      lng: lngs.reduce((a, b) => a + b, 0) / lngs.length,
     }
-  }, [map, resultados])
+  }, [pontosValidos])
   
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-4">
+      {/* Header Grande e Destacado */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary-700 via-primary-600 to-secondary-500 text-white p-6 md:p-8">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-semibold">Consulta BDGD</h1>
-            <p className="text-white/90">
-              Filtros completos por localidade, classe e consumo
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight">⚡ Consulta BDGD</h1>
+            <p className="text-lg md:text-xl text-white/90 mt-2 font-medium">
+              Base de Dados Geográfica da Distribuidora - ANEEL
             </p>
           </div>
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className="btn-outline bg-white/10 border-white/20 text-white hover:bg-white/20"
+            className="btn-outline bg-white/10 border-white/20 text-white hover:bg-white/20 text-lg px-6 py-3"
           >
-            {showFilters ? <XMarkIcon className="w-5 h-5" /> : <FunnelIcon className="w-5 h-5" />}
-            <span className="ml-2">{showFilters ? 'Ocultar Filtros' : 'Mostrar Filtros'}</span>
+            {showFilters ? <XMarkIcon className="w-6 h-6" /> : <FunnelIcon className="w-6 h-6" />}
+            <span className="ml-2 font-semibold">{showFilters ? 'Ocultar Filtros' : 'Mostrar Filtros'}</span>
           </button>
         </div>
-        <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/10" />
-        <div className="absolute -left-10 -bottom-10 h-40 w-40 rounded-full bg-white/10" />
+        <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10" />
+        <div className="absolute -left-10 -bottom-10 h-48 w-48 rounded-full bg-white/10" />
       </div>
       
       {/* Filtros */}
@@ -724,143 +726,138 @@ export default function ConsultaPage() {
         </form>
       )}
       
-      {/* Resultados */}
-      {resultados && (
-        <div className="space-y-6">
-          {/* Header dos Resultados com Botões de Download */}
-          <div className="card p-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      {/* Loading State */}
+      {consultaMutation.isPending && (
+        <div className="space-y-4">
+          <div className="card p-5 bg-gradient-to-r from-gray-50 to-white">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
               <div>
-                <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                  📋 Dados Encontrados
+                <h2 className="text-xl font-bold text-gray-900">Buscando dados...</h2>
+                <p className="text-gray-500">Aguarde enquanto processamos sua consulta</p>
+              </div>
+            </div>
+          </div>
+          <div className="card">
+            <TableSkeleton rows={10} cols={10} />
+          </div>
+          <div className="card">
+            <MapSkeleton />
+          </div>
+        </div>
+      )}
+      
+      {/* Resultados */}
+      {resultados && !consultaMutation.isPending && (
+        <div className="space-y-4">
+          {/* Header dos Resultados com Botões de Download */}
+          <div className="card p-5 bg-gradient-to-r from-gray-50 to-white">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div>
+                <h2 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-3">
+                  📊 Resultados da Consulta
                 </h2>
-                <p className="text-gray-600 mt-1">
-                  <span className="font-semibold text-primary-600">{resultados.total.toLocaleString('pt-BR')}</span> registros
-                  {' '} • Página {resultados.page} de {resultados.total_pages}
+                <p className="text-lg text-gray-600 mt-2">
+                  <span className="font-bold text-2xl text-primary-600">{resultados.total.toLocaleString('pt-BR')}</span> registros encontrados
+                  <span className="text-gray-400 mx-2">•</span>
+                  Página <span className="font-semibold">{resultados.page}</span> de <span className="font-semibold">{resultados.total_pages}</span>
                 </p>
               </div>
               
               {/* Botões de Download Destacados */}
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => exportarCsvMutation.mutate()}
                   disabled={exportarCsvMutation.isPending}
-                  className="inline-flex items-center px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                  className="inline-flex items-center px-5 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors disabled:opacity-50 text-base shadow-lg hover:shadow-xl"
                 >
                   {exportarCsvMutation.isPending ? (
                     <span className="spinner mr-2" />
                   ) : (
                     <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
                   )}
-                  📥 Baixar CSV
+                  📥 CSV
                 </button>
                 <button
                   onClick={() => exportarXlsxMutation.mutate()}
                   disabled={exportarXlsxMutation.isPending}
-                  className="inline-flex items-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                  className="inline-flex items-center px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors disabled:opacity-50 text-base shadow-lg hover:shadow-xl"
                 >
                   {exportarXlsxMutation.isPending ? (
                     <span className="spinner mr-2" />
                   ) : (
                     <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
                   )}
-                  📥 Baixar XLSX
+                  📥 XLSX
                 </button>
                 <button
                   onClick={() => exportarKmlMutation.mutate()}
                   disabled={exportarKmlMutation.isPending}
-                  className="inline-flex items-center px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                  className="inline-flex items-center px-5 py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-lg transition-colors disabled:opacity-50 text-base shadow-lg hover:shadow-xl"
                 >
                   {exportarKmlMutation.isPending ? (
                     <span className="spinner mr-2" />
                   ) : (
                     <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
                   )}
-                  📥 Baixar KML
+                  📥 KML
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Tabela de Resultados */}
+          {/* Tabela Compacta com Todas as Informações */}
           <div className="card">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-y border-gray-200">
+            <div className="overflow-x-auto max-h-64 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-100 border-y border-gray-200 sticky top-0">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase">
+                      UF
+                    </th>
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase">
                       Município
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase">
                       Classe
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Grupo Tarifário
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase">
+                      Grupo
                     </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Demanda (kW)
+                    <th className="px-2 py-2 text-center text-xs font-bold text-gray-700 uppercase">
+                      LIV
                     </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Energia Máx (kWh)
+                    <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase">
+                      Demanda
                     </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase">
+                      Carga Inst.
+                    </th>
+                    <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase">
+                      Energia Máx
+                    </th>
+                    <th className="px-2 py-2 text-center text-xs font-bold text-gray-700 uppercase">
                       Solar
                     </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Coordenadas
+                    <th className="px-2 py-2 text-center text-xs font-bold text-gray-700 uppercase">
+                      📍 Street View
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {resultados.dados.map((cliente, idx) => (
-                    <tr key={cliente.cod_id || idx} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm text-gray-900">
-                        {cliente.nome_municipio || cliente.mun}
-                        {cliente.nome_uf && (
-                          <span className="text-gray-500 ml-1">({cliente.nome_uf})</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {cliente.clas_sub_descricao || cliente.clas_sub}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {cliente.gru_tar}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono">
-                        {cliente.dem_cont?.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono">
-                        {cliente.ene_max?.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={clsx(
-                          'badge',
-                          cliente.possui_solar ? 'badge-success' : 'badge-gray'
-                        )}>
-                          {cliente.possui_solar ? 'Sim' : 'Não'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-center">
-                        {(cliente.point_y && cliente.point_x) || (cliente.latitude && cliente.longitude) ? (
-                          <span className="text-gray-600 font-mono text-xs">
-                            {(cliente.point_y || cliente.latitude)?.toFixed(4)}, {(cliente.point_x || cliente.longitude)?.toFixed(4)}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                    </tr>
+                    <TableRow key={cliente.cod_id || idx} cliente={cliente} />
                   ))}
                 </tbody>
               </table>
             </div>
             
             {/* Paginação */}
-            <div className="card-body border-t flex items-center justify-between">
+            <div className="px-4 py-3 border-t bg-gray-50 flex flex-col sm:flex-row items-center justify-between gap-3">
               <p className="text-sm text-gray-600">
-                Mostrando {((resultados.page - 1) * resultados.per_page) + 1} a{' '}
-                {Math.min(resultados.page * resultados.per_page, resultados.total)} de{' '}
-                {resultados.total.toLocaleString('pt-BR')} resultados
+                Mostrando <span className="font-bold">{((resultados.page - 1) * resultados.per_page) + 1}</span> a{' '}
+                <span className="font-bold">{Math.min(resultados.page * resultados.per_page, resultados.total)}</span> de{' '}
+                <span className="font-bold text-primary-600">{resultados.total.toLocaleString('pt-BR')}</span> resultados
               </p>
               
               <div className="flex items-center gap-2">
@@ -870,74 +867,135 @@ export default function ConsultaPage() {
                     const formData = buildFiltros()
                     consultaMutation.mutate({ ...formData, page: resultados.page - 1 })
                   }}
-                  className="btn-outline text-sm"
+                  className="btn-outline text-sm px-4 py-2 font-semibold"
                 >
-                  Anterior
+                  ← Anterior
                 </button>
+                <span className="px-3 py-1 bg-primary-100 text-primary-700 font-bold rounded-lg text-sm">
+                  {resultados.page} / {resultados.total_pages}
+                </span>
                 <button
                   disabled={resultados.page >= resultados.total_pages}
                   onClick={() => {
                     const formData = buildFiltros()
                     consultaMutation.mutate({ ...formData, page: resultados.page + 1 })
                   }}
-                  className="btn-outline text-sm"
+                  className="btn-outline text-sm px-4 py-2 font-semibold"
                 >
-                  Próxima
+                  Próxima →
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Mapa com Coordenadas dos Clientes */}
-          <div className="card">
-            <div className="card-header">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <MapPinIcon className="w-5 h-5 text-primary-600" />
-                🗺️ Mapa com Coordenadas dos Clientes
+          {/* Mapa Integrado com Leaflet (OpenStreetMap - Gratuito) */}
+          <div className="card ring-4 ring-primary-200 ring-offset-2 shadow-2xl">
+            <div className="px-6 py-5 border-b bg-gradient-to-r from-primary-600 to-blue-600">
+              <h2 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-3">
+                <MapPinIcon className="w-8 h-8 text-white" />
+                🗺️ Mapa de Localização
               </h2>
-              <p className="text-sm text-gray-600 mt-1">
-                Pontos com coordenadas válidas desta página
+              <p className="text-base text-primary-100 mt-1">
+                {pontosValidos.length > 0 
+                  ? `📍 ${pontosValidos.length} pontos plotados no mapa • Clique nos marcadores para detalhes`
+                  : 'Pontos com coordenadas válidas serão exibidos aqui'}
               </p>
             </div>
             
-            {GOOGLE_MAPS_API_KEY ? (
-              <div className="relative">
-                {/* Mapa Principal */}
-                <div 
-                  ref={mapContainerRef} 
-                  className="w-full h-[500px] bg-gray-100"
-                />
-                
-                {/* Street View (overlay) */}
-                {showStreetView && (
-                  <div className="absolute inset-0 z-10">
-                    <div 
-                      ref={streetViewContainerRef}
-                      className="w-full h-full"
-                    />
-                    <button
-                      onClick={() => {
-                        setShowStreetView(false)
-                        if (streetView) streetView.setVisible(false)
-                      }}
-                      className="absolute top-4 right-4 bg-white p-2 rounded-lg shadow-lg hover:bg-gray-100"
-                    >
-                      <XMarkIcon className="w-6 h-6" />
-                    </button>
+            <div className="relative">
+              {pontosValidos.length > 0 ? (
+                <MapContainer
+                  center={[mapCenter.lat, mapCenter.lng]}
+                  zoom={pontosValidos.length === 1 ? 14 : 5}
+                  style={{ height: '700px', width: '100%' }}
+                  scrollWheelZoom={true}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  {pontosValidos.map((cliente, idx) => {
+                    const lat = Number(cliente.point_y || cliente.latitude)
+                    const lng = Number(cliente.point_x || cliente.longitude)
+                    return (
+                      <Marker
+                        key={cliente.cod_id || idx}
+                        position={[lat, lng]}
+                        icon={cliente.possui_solar ? solarIcon : normalIcon}
+                      >
+                        <Popup>
+                          <div className="min-w-[220px]">
+                            <h3 className="font-bold text-base text-blue-800 mb-2">
+                              📍 {cliente.nome_municipio || cliente.mun || 'Cliente'}
+                            </h3>
+                            <div className="space-y-1 text-sm">
+                              <div className="flex justify-between border-b pb-1">
+                                <span className="font-medium">UF:</span>
+                                <span>{cliente.nome_uf || '-'}</span>
+                              </div>
+                              <div className="flex justify-between border-b pb-1">
+                                <span className="font-medium">Classe:</span>
+                                <span>{cliente.clas_sub_descricao || cliente.clas_sub || '-'}</span>
+                              </div>
+                              <div className="flex justify-between border-b pb-1">
+                                <span className="font-medium">Grupo:</span>
+                                <span>{cliente.gru_tar || '-'}</span>
+                              </div>
+                              <div className="flex justify-between border-b pb-1">
+                                <span className="font-medium">Demanda:</span>
+                                <span className="font-semibold text-green-700">
+                                  {cliente.dem_cont?.toLocaleString('pt-BR') || '-'} kW
+                                </span>
+                              </div>
+                              <div className="flex justify-between border-b pb-1">
+                                <span className="font-medium">Energia Máx:</span>
+                                <span className="font-semibold text-blue-700">
+                                  {cliente.ene_max?.toLocaleString('pt-BR') || '-'} kWh
+                                </span>
+                              </div>
+                              <div className="flex justify-between pb-1">
+                                <span className="font-medium">Solar:</span>
+                                <span className={cliente.possui_solar ? 'text-green-600' : 'text-red-500'}>
+                                  {cliente.possui_solar ? '☀️ Sim' : '❌ Não'}
+                                </span>
+                              </div>
+                            </div>
+                            <a
+                              href={getStreetViewUrl(lat, lng)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-3 block w-full text-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-sm transition-colors"
+                            >
+                              🚶 Abrir Street View
+                            </a>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    )
+                  })}
+                </MapContainer>
+              ) : (
+                <div className="h-[450px] flex items-center justify-center bg-gray-50">
+                  <div className="text-center">
+                    <MapPinIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500">Nenhum ponto com coordenadas para exibir</p>
                   </div>
-                )}
+                </div>
+              )}
+              
+              {/* Legenda */}
+              <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg p-3 text-xs z-[1000]">
+                <div className="font-bold text-gray-800 mb-2">Legenda:</div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-4 h-4 rounded-full bg-green-500 border-2 border-white shadow"></span>
+                  <span>Com Geração Solar</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-4 h-4 rounded-full bg-blue-500 border-2 border-white shadow"></span>
+                  <span>Sem Geração Solar</span>
+                </div>
               </div>
-            ) : (
-              <div className="p-8 text-center bg-gray-50">
-                <MapPinIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">
-                  Configure a API Key do Google Maps no arquivo .env para visualizar o mapa
-                </p>
-                <p className="text-sm text-gray-500 mt-2">
-                  VITE_GOOGLE_MAPS_API_KEY=sua_chave_aqui
-                </p>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       )}

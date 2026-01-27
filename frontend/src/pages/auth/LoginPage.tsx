@@ -25,7 +25,17 @@ export default function LoginPage() {
     try {
       await login(data.email, data.password)
       toast.success('Login realizado com sucesso!')
-      navigate('/')
+      
+      // Verificar o status do usuário após login
+      const userState = useAuthStore.getState()
+      if (userState.user?.status === 'pending') {
+        navigate('/pending-approval')
+      } else if (userState.user?.status === 'approved') {
+        navigate('/')
+      } else {
+        toast.error('Sua conta não está ativa. Entre em contato com o administrador.')
+        useAuthStore.getState().logout()
+      }
     } catch (error: unknown) {
       const err = error as { response?: { data?: { detail?: string } } }
       const message = err.response?.data?.detail || 'Erro ao fazer login'

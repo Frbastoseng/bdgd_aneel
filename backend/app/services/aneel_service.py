@@ -32,16 +32,36 @@ MUNICIPIOS_SOURCES = [
     DATA_DIR / "RELATORIO_DTB_BRASIL_DISTRITO.xls",
 ]
 
+# Cache em memória para dados processados (evita reload a cada requisição)
+_cache_dados_processados: Optional[pd.DataFrame] = None
+_cache_localidades: Optional[pd.DataFrame] = None
+_cache_opcoes_filtros: Optional[Dict[str, Any]] = None
+_cache_dados_por_uf: Dict[str, pd.DataFrame] = {}
+
 
 class ANEELService:
     """Serviço para dados da BDGD ANEEL"""
 
     @staticmethod
+    def _limpar_cache():
+        """Limpa o cache em memória (usar após atualizar dados)"""
+        global _cache_dados_processados, _cache_localidades, _cache_opcoes_filtros, _cache_dados_por_uf
+        _cache_dados_processados = None
+        _cache_localidades = None
+        _cache_opcoes_filtros = None
+        _cache_dados_por_uf = {}
+
+    @staticmethod
     def carregar_localidades() -> pd.DataFrame:
-        """Carrega base de localidades (UF, município, micro e meso)."""
+        """Carrega base de localidades (UF, município, micro e meso) com cache."""
+        global _cache_localidades
+        if _cache_localidades is not None:
+            return _cache_localidades
+        
         if MUNICIPIOS_FILE.exists():
             try:
-                return pd.read_parquet(MUNICIPIOS_FILE)
+                _cache_localidades = pd.read_parquet(MUNICIPIOS_FILE)
+                return _cache_localidades
             except Exception:
                 pass
 
@@ -51,7 +71,8 @@ class ANEELService:
                     df_loc = pd.read_excel(src, dtype=str)
                     df_loc.columns = df_loc.columns.str.strip()
                     df_loc.to_parquet(MUNICIPIOS_FILE, index=False)
-                    return df_loc
+                    _cache_localidades = df_loc
+                    return _cache_localidades
                 except Exception:
                     continue
 
@@ -139,14 +160,57 @@ class ANEELService:
             # Salvar em parquet
             df.to_parquet(ANEEL_DATA_FILE, index=False)
             
+            # Limpar cache para recarregar dados atualizados
+            ANEELService._limpar_cache()
+            
             return df
     
     @staticmethod
     def carregar_dados() -> pd.DataFrame:
-        """Carrega dados do arquivo local"""
+        """Carrega dados do arquivo local com cache em memória"""
+        global _cache_dados_processados
+        
+        # Se já temos dados processados em cache, retornar
+        if _cache_dados_processados is not None:
+            return _cache_dados_processados
+        
         if ANEEL_DATA_FILE.exists():
             return pd.read_parquet(ANEEL_DATA_FILE)
         return pd.DataFrame()
+    
+    @staticmethod
+    def carregar_dados_processados() -> pd.DataFrame:
+        """Carrega e processa dados com cache - use esta função para consultas"""
+        global _cache_dados_processados
+        
+        if _cache_dados_processados is not None:
+            return _cache_dados_processados
+        
+        df = ANEELService.carregar_dados()
+        if df.empty:
+            return df
+        
+        df = ANEELService.processar_dados(df)
+        df = ANEELService.enriquecer_com_localidades(df)
+        
+        _cache_dados_processados = df
+        return _cache_dados_processados
+    
+    @staticmethod
+    def carregar_dados_por_uf(uf: str) -> pd.DataFrame:
+        """Carrega dados filtrados por UF com cache - muito mais rápido para consultas"""
+        global _cache_dados_por_uf
+        
+        if uf in _cache_dados_por_uf:
+            return _cache_dados_por_uf[uf]
+        
+        df = ANEELService.carregar_dados_processados()
+        if df.empty or "Nome_UF" not in df.columns:
+            return df
+        
+        df_uf = df[df["Nome_UF"] == uf].copy()
+        _cache_dados_por_uf[uf] = df_uf
+        return df_uf
     
     @staticmethod
     def processar_dados(df: pd.DataFrame) -> pd.DataFrame:
@@ -188,101 +252,30 @@ class ANEELService:
     @staticmethod
     async def consultar_dados(filtros: FiltroConsulta) -> Tuple[List[Dict], int]:
         """
-        Consulta dados com filtros.
-        Lógica igual ao projeto original bdgd_04.py:
-        1. Filtra na planilha IBGE para obter códigos de municípios
-        2. Usa esses códigos para filtrar os dados da ANEEL
-        3. Faz merge para adicionar Nome_UF/Nome_Município ao resultado
+        Consulta dados com filtros - OTIMIZADO COM CACHE.
+        Se há filtro de UF, usa cache por UF para resposta instantânea.
         """
-        df = ANEELService.carregar_dados()
+        # Usar cache otimizado por UF se disponível
+        if filtros.uf:
+            df = ANEELService.carregar_dados_por_uf(filtros.uf)
+        else:
+            df = ANEELService.carregar_dados_processados()
         
         if df.empty:
             return [], 0
         
-        df = ANEELService.processar_dados(df)
+        # Aplicar filtros de localidade (já temos Nome_UF, Nome_Município no cache)
+        if filtros.municipios and "Nome_Município" in df.columns:
+            municipios = [str(m).strip() for m in filtros.municipios if str(m).strip()]
+            if municipios:
+                df = df[df["Nome_Município"].isin(municipios)]
         
-        # Carregar planilha IBGE para filtros de localidade
-        df_ibge = ANEELService.carregar_localidades()
+        if filtros.microrregioes and "Nome_Microrregião" in df.columns:
+            df = df[df["Nome_Microrregião"].isin(filtros.microrregioes)]
         
-        # Identificar coluna de código do município no IBGE
-        code_candidates = [
-            "Código Município Completo",
-            "Codigo Municipio Completo",
-            "Código Município",
-            "Codigo Municipio",
-        ]
-        code_col = None
-        if not df_ibge.empty:
-            code_col = next((c for c in code_candidates if c in df_ibge.columns), None)
-        
-        # Se temos filtros de localidade e planilha IBGE disponível
-        if not df_ibge.empty and code_col:
-            df_ibge_filtrado = df_ibge.copy()
-            
-            # Filtrar por UF na planilha IBGE
-            if filtros.uf and "Nome_UF" in df_ibge_filtrado.columns:
-                df_ibge_filtrado = df_ibge_filtrado[df_ibge_filtrado["Nome_UF"] == filtros.uf]
-            
-            # Filtrar por Municípios na planilha IBGE
-            if filtros.municipios and "Nome_Município" in df_ibge_filtrado.columns:
-                municipios = [str(m).strip() for m in filtros.municipios if str(m).strip()]
-                if municipios:
-                    df_ibge_filtrado = df_ibge_filtrado[df_ibge_filtrado["Nome_Município"].isin(municipios)]
-            
-            # Filtrar por Microrregiões na planilha IBGE
-            if filtros.microrregioes and "Nome_Microrregião" in df_ibge_filtrado.columns:
-                df_ibge_filtrado = df_ibge_filtrado[df_ibge_filtrado["Nome_Microrregião"].isin(filtros.microrregioes)]
-            
-            # Filtrar por Mesorregiões na planilha IBGE
-            if filtros.mesorregioes and "Nome_Mesorregião" in df_ibge_filtrado.columns:
-                df_ibge_filtrado = df_ibge_filtrado[df_ibge_filtrado["Nome_Mesorregião"].isin(filtros.mesorregioes)]
-            
-            # Obter códigos de municípios filtrados
-            codigos_municipios = df_ibge_filtrado[code_col].dropna().unique().tolist()
-            
-            # Se houve filtro de localidade, filtrar dados ANEEL pelos códigos
-            tem_filtro_localidade = filtros.uf or filtros.municipios or filtros.microrregioes or filtros.mesorregioes
-            if tem_filtro_localidade and "MUN" in df.columns:
-                df["MUN"] = df["MUN"].astype(str)
-                codigos_str = [str(c) for c in codigos_municipios]
-                df = df[df["MUN"].isin(codigos_str)]
-                
-                if df.empty:
-                    return [], 0
-            
-            # Fazer merge para adicionar Nome_UF/Nome_Município (como no projeto original)
-            if "MUN" in df.columns:
-                cols_merge = [code_col]
-                for col in ["Nome_UF", "Nome_Município", "Nome_Microrregião", "Nome_Mesorregião"]:
-                    if col in df_ibge.columns:
-                        cols_merge.append(col)
-                
-                df_ibge_merge = df_ibge[cols_merge].drop_duplicates()
-                df_ibge_merge[code_col] = df_ibge_merge[code_col].astype(str)
-                df["MUN"] = df["MUN"].astype(str)
-                
-                df = df.merge(
-                    df_ibge_merge,
-                    left_on="MUN",
-                    right_on=code_col,
-                    how="inner" if tem_filtro_localidade else "left"
-                )
-                
-                if code_col in df.columns and code_col != "MUN":
-                    df = df.drop(columns=[code_col])
-        else:
-            # Fallback: usar enriquecimento básico
-            df = ANEELService.enriquecer_com_localidades(df)
-            
-            # Filtros diretos (se dados já estão enriquecidos)
-            if filtros.uf and "Nome_UF" in df.columns:
-                df = df[df["Nome_UF"] == filtros.uf]
-            
-            if filtros.municipios:
-                municipios = [str(m).strip() for m in filtros.municipios if str(m).strip()]
-                if municipios and "Nome_Município" in df.columns:
-                    df = df[df["Nome_Município"].isin(municipios)]
-        
+        if filtros.mesorregioes and "Nome_Mesorregião" in df.columns:
+            df = df[df["Nome_Mesorregião"].isin(filtros.mesorregioes)]
+
         # Aplicar filtros avançados (independentes de localidade)
         if filtros.possui_solar is not None:
             if filtros.possui_solar:
