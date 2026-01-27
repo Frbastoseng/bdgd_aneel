@@ -154,26 +154,57 @@ class ANEELService:
         return df
     
     @staticmethod
+    async def _fazer_requisicao_com_retry(client: httpx.AsyncClient, url: str, params: dict, max_retries: int = 5) -> dict:
+        """Faz requisição HTTP com retry automático e backoff exponencial"""
+        last_exception = None
+        
+        for tentativa in range(max_retries):
+            try:
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+                return response.json()
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError, httpx.HTTPStatusError) as e:
+                last_exception = e
+                wait_time = min(2 ** tentativa * 2, 60)  # Backoff: 2, 4, 8, 16, 32 segundos (max 60)
+                
+                if tentativa < max_retries - 1:
+                    ANEELService._update_progress(
+                        "downloading", 
+                        _download_progress["current"], 
+                        _download_progress["total"], 
+                        f"Erro na requisição (tentativa {tentativa + 1}/{max_retries}). Aguardando {wait_time}s..."
+                    )
+                    await asyncio.sleep(wait_time)
+                else:
+                    raise last_exception
+        
+        raise last_exception
+    
+    @staticmethod
     async def download_dados_aneel(progress_callback=None) -> pd.DataFrame:
-        """Baixa dados completos da API ANEEL"""
+        """Baixa dados completos da API ANEEL com retry robusto"""
         try:
             ANEELService._update_progress("downloading", 0, 0, "Conectando à API da ANEEL...")
             
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            # Timeout configurado por operação (conexão: 30s, leitura: 300s para dados grandes)
+            timeout = httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=30.0)
+            
+            async with httpx.AsyncClient(timeout=timeout, limits=httpx.Limits(max_connections=5)) as client:
                 # Primeiro, obter total de registros
-                response = await client.get(
+                data = await ANEELService._fazer_requisicao_com_retry(
+                    client,
                     settings.ANEEL_API_URL,
-                    params={"resource_id": settings.ANEEL_RESOURCE_ID, "limit": 1}
+                    {"resource_id": settings.ANEEL_RESOURCE_ID, "limit": 1}
                 )
-                response.raise_for_status()
-                total_registros = response.json()["result"]["total"]
+                total_registros = data["result"]["total"]
                 
                 ANEELService._update_progress("downloading", 0, total_registros, f"Iniciando download de {total_registros:,} registros...")
                 
-                # Baixar em lotes
-                limite_por_requisicao = 32000
+                # Baixar em lotes menores para maior estabilidade
+                limite_por_requisicao = 20000  # Reduzido de 32000 para maior estabilidade
                 dados_completos = []
                 offset = 0
+                requisicoes_consecutivas_ok = 0
                 
                 while offset < total_registros:
                     params = {
@@ -182,28 +213,48 @@ class ANEELService:
                         "offset": offset
                     }
                     
-                    response = await client.get(settings.ANEEL_API_URL, params=params)
-                    response.raise_for_status()
-                    
-                    registros = response.json().get("result", {}).get("records", [])
-                    if not registros:
-                        break
-                    
-                    dados_completos.extend(registros)
-                    offset += limite_por_requisicao
-                    
-                    # Atualizar progresso
-                    ANEELService._update_progress(
-                        "downloading", 
-                        len(dados_completos), 
-                        total_registros, 
-                        f"Baixando... {len(dados_completos):,} de {total_registros:,} registros"
-                    )
-                    
-                    if progress_callback:
-                        progress_callback(len(dados_completos), total_registros)
+                    try:
+                        data = await ANEELService._fazer_requisicao_com_retry(client, settings.ANEEL_API_URL, params)
+                        registros = data.get("result", {}).get("records", [])
+                        
+                        if not registros:
+                            break
+                        
+                        dados_completos.extend(registros)
+                        offset += limite_por_requisicao
+                        requisicoes_consecutivas_ok += 1
+                        
+                        # Atualizar progresso
+                        ANEELService._update_progress(
+                            "downloading", 
+                            len(dados_completos), 
+                            total_registros, 
+                            f"Baixando... {len(dados_completos):,} de {total_registros:,} registros"
+                        )
+                        
+                        if progress_callback:
+                            progress_callback(len(dados_completos), total_registros)
+                        
+                        # Pequena pausa para não sobrecarregar a API (a cada 5 requisições bem sucedidas)
+                        if requisicoes_consecutivas_ok % 5 == 0:
+                            await asyncio.sleep(0.5)
+                            
+                    except Exception as e:
+                        # Se falhar após todos os retries, mas temos dados parciais, salvar progresso
+                        if len(dados_completos) > 0:
+                            ANEELService._update_progress(
+                                "downloading", 
+                                len(dados_completos), 
+                                total_registros, 
+                                f"Erro persistente. Salvando {len(dados_completos):,} registros já baixados..."
+                            )
+                            # Salvar dados parciais
+                            df_parcial = pd.DataFrame(dados_completos)
+                            df_parcial.to_parquet(ANEEL_DATA_FILE, index=False)
+                            ANEELService._limpar_cache()
+                        raise
                 
-                ANEELService._update_progress("downloading", total_registros, total_registros, "Salvando dados...")
+                ANEELService._update_progress("downloading", len(dados_completos), total_registros, "Salvando dados...")
                 
                 df = pd.DataFrame(dados_completos)
                 
@@ -213,12 +264,25 @@ class ANEELService:
                 # Limpar cache para recarregar dados atualizados
                 ANEELService._limpar_cache()
                 
-                ANEELService._update_progress("completed", total_registros, total_registros, f"Download concluído! {total_registros:,} registros salvos.")
+                ANEELService._update_progress("completed", len(dados_completos), total_registros, f"Download concluído! {len(dados_completos):,} registros salvos.")
                 
                 return df
                 
         except Exception as e:
-            ANEELService._update_progress("error", 0, 0, "Erro no download", str(e))
+            error_msg = str(e)
+            # Informar quantos registros foram salvos antes do erro
+            registros_salvos = 0
+            if ANEEL_DATA_FILE.exists():
+                try:
+                    df_check = pd.read_parquet(ANEEL_DATA_FILE)
+                    registros_salvos = len(df_check)
+                except:
+                    pass
+            
+            if registros_salvos > 0:
+                error_msg = f"{error_msg} (Parcial: {registros_salvos:,} registros salvos)"
+            
+            ANEELService._update_progress("error", registros_salvos, _download_progress.get("total", 0), "Erro no download", error_msg)
             raise
     
     @staticmethod
@@ -508,12 +572,36 @@ class TarifasService:
     """Serviço para tarifas da ANEEL"""
     
     @staticmethod
+    async def _fazer_requisicao_com_retry(client: httpx.AsyncClient, url: str, params: dict, max_retries: int = 5) -> dict:
+        """Faz requisição HTTP com retry automático e backoff exponencial"""
+        last_exception = None
+        
+        for tentativa in range(max_retries):
+            try:
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+                return response.json()
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError, httpx.HTTPStatusError) as e:
+                last_exception = e
+                wait_time = min(2 ** tentativa * 2, 60)
+                
+                if tentativa < max_retries - 1:
+                    await asyncio.sleep(wait_time)
+                else:
+                    raise last_exception
+        
+        raise last_exception
+    
+    @staticmethod
     async def download_tarifas() -> pd.DataFrame:
-        """Baixa tarifas da API ANEEL"""
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        """Baixa tarifas da API ANEEL com retry robusto"""
+        timeout = httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=30.0)
+        
+        async with httpx.AsyncClient(timeout=timeout, limits=httpx.Limits(max_connections=5)) as client:
             dados_completos = []
             offset = 0
-            limite = 32000
+            limite = 20000  # Reduzido para maior estabilidade
+            requisicoes_consecutivas_ok = 0
             
             while True:
                 params = {
@@ -522,10 +610,9 @@ class TarifasService:
                     "offset": offset
                 }
                 
-                response = await client.get(settings.ANEEL_API_URL, params=params)
-                response.raise_for_status()
+                data = await TarifasService._fazer_requisicao_com_retry(client, settings.ANEEL_API_URL, params)
                 
-                result = response.json().get("result", {})
+                result = data.get("result", {})
                 records = result.get("records", [])
                 total = result.get("total", 0)
                 
@@ -534,6 +621,11 @@ class TarifasService:
                 
                 dados_completos.extend(records)
                 offset += len(records)
+                requisicoes_consecutivas_ok += 1
+                
+                # Pequena pausa a cada 5 requisições
+                if requisicoes_consecutivas_ok % 5 == 0:
+                    await asyncio.sleep(0.5)
                 
                 if offset >= total:
                     break
