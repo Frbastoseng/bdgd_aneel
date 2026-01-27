@@ -8,7 +8,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-bdgd_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-BdGd@Secure2026!}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-BdGdSecure2026}
       POSTGRES_DB: ${DB_NAME:-bdgd_aneel_prod}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -25,7 +25,7 @@ services:
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: bdgd_redis
+    container_name: redis
     restart: unless-stopped
     ports:
       - "6381:6379"
@@ -55,9 +55,9 @@ services:
     environment:
       - APP_NAME=${APP_NAME:-BDGD Pro}
       - SECRET_KEY=${SECRET_KEY:-your-super-secret-key-change-in-production}
-      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-bdgd_user}:${DB_PASSWORD:-BdGd@Secure2026!}@${DB_HOST:-bdgd_db}:${DB_PORT:-5432}/${DB_NAME:-bdgd_aneel_prod}
-      - DATABASE_URL_SYNC=postgresql://${DB_USER:-bdgd_user}:${DB_PASSWORD:-BdGd@Secure2026!}@${DB_HOST:-bdgd_db}:${DB_PORT:-5432}/${DB_NAME:-bdgd_aneel_prod}
-      - REDIS_URL=redis://bdgd_redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-bdgd_user}:${DB_PASSWORD:-BdGdSecure2026}@db:${DB_PORT:-5432}/${DB_NAME:-bdgd_aneel_prod}
+      - DATABASE_URL_SYNC=postgresql://${DB_USER:-bdgd_user}:${DB_PASSWORD:-BdGdSecure2026}@db:${DB_PORT:-5432}/${DB_NAME:-bdgd_aneel_prod}
+      - REDIS_URL=redis://redis:6379/0
       - CORS_ORIGINS=https://bdgd.btstech.com.br,http://localhost,http://localhost:80,http://localhost:3000,http://localhost:8080
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@bdgd.btstech.com.br}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin@Bdgd2026!}
