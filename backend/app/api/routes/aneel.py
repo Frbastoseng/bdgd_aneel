@@ -245,11 +245,28 @@ async def atualizar_dados(
     """
     Inicia atualização dos dados da ANEEL em background.
     
-    Requer autenticação.
+    Requer autenticação de admin.
     """
+    # Verificar se já está em andamento
+    progress = ANEELService.get_download_progress()
+    if progress["status"] == "downloading":
+        return {"message": "Download já está em andamento", "progress": progress}
+    
     background_tasks.add_task(ANEELService.download_dados_aneel)
     
     return {"message": "Atualização iniciada em background"}
+
+
+@router.get("/progresso-download")
+async def progresso_download(
+    current_user: User = Depends(get_current_admin)
+):
+    """
+    Retorna o progresso atual do download de dados.
+    
+    Requer autenticação de admin.
+    """
+    return ANEELService.get_download_progress()
 
 
 @router.get("/status-dados")

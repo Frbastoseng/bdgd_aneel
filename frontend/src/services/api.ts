@@ -188,6 +188,11 @@ export const aneelApi = {
     return response.data
   },
   
+  progressoDownload: async () => {
+    const response = await api.get('/aneel/progresso-download')
+    return response.data
+  },
+  
   statusDados: async () => {
     const response = await api.get('/aneel/status-dados')
     return response.data

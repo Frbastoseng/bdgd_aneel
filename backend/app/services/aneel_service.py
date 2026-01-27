@@ -38,6 +38,18 @@ _cache_localidades: Optional[pd.DataFrame] = None
 _cache_opcoes_filtros: Optional[Dict[str, Any]] = None
 _cache_dados_por_uf: Dict[str, pd.DataFrame] = {}
 
+# Estado global do progresso de download
+_download_progress: Dict[str, Any] = {
+    "status": "idle",  # idle, downloading, completed, error
+    "current": 0,
+    "total": 0,
+    "percent": 0,
+    "message": "",
+    "started_at": None,
+    "completed_at": None,
+    "error": None
+}
+
 
 class ANEELService:
     """Serviço para dados da BDGD ANEEL"""
@@ -50,6 +62,29 @@ class ANEELService:
         _cache_localidades = None
         _cache_opcoes_filtros = None
         _cache_dados_por_uf = {}
+
+    @staticmethod
+    def get_download_progress() -> Dict[str, Any]:
+        """Retorna o progresso atual do download"""
+        global _download_progress
+        return _download_progress.copy()
+    
+    @staticmethod
+    def _update_progress(status: str, current: int = 0, total: int = 0, message: str = "", error: str = None):
+        """Atualiza o progresso do download"""
+        global _download_progress
+        _download_progress["status"] = status
+        _download_progress["current"] = current
+        _download_progress["total"] = total
+        _download_progress["percent"] = round((current / total * 100) if total > 0 else 0, 1)
+        _download_progress["message"] = message
+        _download_progress["error"] = error
+        
+        if status == "downloading" and _download_progress["started_at"] is None:
+            _download_progress["started_at"] = datetime.now().isoformat()
+            _download_progress["completed_at"] = None
+        elif status in ["completed", "error"]:
+            _download_progress["completed_at"] = datetime.now().isoformat()
 
     @staticmethod
     def carregar_localidades() -> pd.DataFrame:
@@ -121,49 +156,70 @@ class ANEELService:
     @staticmethod
     async def download_dados_aneel(progress_callback=None) -> pd.DataFrame:
         """Baixa dados completos da API ANEEL"""
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            # Primeiro, obter total de registros
-            response = await client.get(
-                settings.ANEEL_API_URL,
-                params={"resource_id": settings.ANEEL_RESOURCE_ID, "limit": 1}
-            )
-            response.raise_for_status()
-            total_registros = response.json()["result"]["total"]
+        try:
+            ANEELService._update_progress("downloading", 0, 0, "Conectando à API da ANEEL...")
             
-            # Baixar em lotes
-            limite_por_requisicao = 32000
-            dados_completos = []
-            offset = 0
-            
-            while offset < total_registros:
-                params = {
-                    "resource_id": settings.ANEEL_RESOURCE_ID,
-                    "limit": limite_por_requisicao,
-                    "offset": offset
-                }
-                
-                response = await client.get(settings.ANEEL_API_URL, params=params)
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                # Primeiro, obter total de registros
+                response = await client.get(
+                    settings.ANEEL_API_URL,
+                    params={"resource_id": settings.ANEEL_RESOURCE_ID, "limit": 1}
+                )
                 response.raise_for_status()
+                total_registros = response.json()["result"]["total"]
                 
-                registros = response.json().get("result", {}).get("records", [])
-                if not registros:
-                    break
+                ANEELService._update_progress("downloading", 0, total_registros, f"Iniciando download de {total_registros:,} registros...")
                 
-                dados_completos.extend(registros)
-                offset += limite_por_requisicao
+                # Baixar em lotes
+                limite_por_requisicao = 32000
+                dados_completos = []
+                offset = 0
                 
-                if progress_callback:
-                    progress_callback(len(dados_completos), total_registros)
-            
-            df = pd.DataFrame(dados_completos)
-            
-            # Salvar em parquet
-            df.to_parquet(ANEEL_DATA_FILE, index=False)
-            
-            # Limpar cache para recarregar dados atualizados
-            ANEELService._limpar_cache()
-            
-            return df
+                while offset < total_registros:
+                    params = {
+                        "resource_id": settings.ANEEL_RESOURCE_ID,
+                        "limit": limite_por_requisicao,
+                        "offset": offset
+                    }
+                    
+                    response = await client.get(settings.ANEEL_API_URL, params=params)
+                    response.raise_for_status()
+                    
+                    registros = response.json().get("result", {}).get("records", [])
+                    if not registros:
+                        break
+                    
+                    dados_completos.extend(registros)
+                    offset += limite_por_requisicao
+                    
+                    # Atualizar progresso
+                    ANEELService._update_progress(
+                        "downloading", 
+                        len(dados_completos), 
+                        total_registros, 
+                        f"Baixando... {len(dados_completos):,} de {total_registros:,} registros"
+                    )
+                    
+                    if progress_callback:
+                        progress_callback(len(dados_completos), total_registros)
+                
+                ANEELService._update_progress("downloading", total_registros, total_registros, "Salvando dados...")
+                
+                df = pd.DataFrame(dados_completos)
+                
+                # Salvar em parquet
+                df.to_parquet(ANEEL_DATA_FILE, index=False)
+                
+                # Limpar cache para recarregar dados atualizados
+                ANEELService._limpar_cache()
+                
+                ANEELService._update_progress("completed", total_registros, total_registros, f"Download concluído! {total_registros:,} registros salvos.")
+                
+                return df
+                
+        except Exception as e:
+            ANEELService._update_progress("error", 0, 0, "Erro no download", str(e))
+            raise
     
     @staticmethod
     def carregar_dados() -> pd.DataFrame:

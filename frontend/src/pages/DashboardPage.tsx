@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/authStore'
 import { aneelApi, adminApi } from '@/services/api'
 import { toast } from 'react-hot-toast'
+import { useState, useEffect } from 'react'
 import {
   ChartBarIcon,
   UsersIcon,
@@ -16,12 +17,25 @@ import {
 } from '@heroicons/react/24/outline'
 import { Link } from 'react-router-dom'
 
+// Tipos para o progresso
+interface DownloadProgress {
+  status: 'idle' | 'downloading' | 'completed' | 'error'
+  current: number
+  total: number
+  percent: number
+  message: string
+  started_at: string | null
+  completed_at: string | null
+  error: string | null
+}
+
 export default function DashboardPage() {
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
   const queryClient = useQueryClient()
+  const [isPolling, setIsPolling] = useState(false)
   
-  const { data: statusDados } = useQuery({
+  const { data: statusDados, refetch: refetchStatus } = useQuery({
     queryKey: ['status-dados'],
     queryFn: aneelApi.statusDados,
   })
@@ -32,18 +46,40 @@ export default function DashboardPage() {
     enabled: isAdmin,
   })
   
+  // Query para progresso do download - apenas quando polling ativo
+  const { data: progressoDownload } = useQuery<DownloadProgress>({
+    queryKey: ['progresso-download'],
+    queryFn: aneelApi.progressoDownload,
+    enabled: isAdmin && isPolling,
+    refetchInterval: isPolling ? 2000 : false, // Poll a cada 2 segundos
+  })
+  
+  // Efeito para controlar o polling baseado no status
+  useEffect(() => {
+    if (progressoDownload) {
+      if (progressoDownload.status === 'downloading') {
+        setIsPolling(true)
+      } else if (progressoDownload.status === 'completed') {
+        setIsPolling(false)
+        refetchStatus()
+        toast.success('Download concluído com sucesso!')
+      } else if (progressoDownload.status === 'error') {
+        setIsPolling(false)
+        toast.error(`Erro no download: ${progressoDownload.error}`)
+      }
+    }
+  }, [progressoDownload, refetchStatus])
+  
   // Mutation para atualizar dados - apenas admin
   const atualizarDadosMutation = useMutation({
     mutationFn: aneelApi.atualizarDados,
     onSuccess: () => {
-      toast.success('Atualização iniciada! Os dados serão baixados em background.')
-      // Aguardar um pouco e atualizar o status
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['status-dados'] })
-      }, 5000)
+      toast.success('Atualização iniciada!')
+      setIsPolling(true)
+      queryClient.invalidateQueries({ queryKey: ['progresso-download'] })
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Erro ao atualizar dados')
+      toast.error(error.response?.data?.detail || 'Erro ao iniciar atualização')
     }
   })
   
@@ -151,7 +187,7 @@ export default function DashboardPage() {
             </h2>
             <div className="flex items-center gap-4">
               {/* Botão Atualizar - apenas admin */}
-              {isAdmin && (
+              {isAdmin && progressoDownload?.status !== 'downloading' && (
                 <button
                   onClick={() => atualizarDadosMutation.mutate()}
                   disabled={atualizarDadosMutation.isPending}
@@ -161,7 +197,7 @@ export default function DashboardPage() {
                     "w-4 h-4",
                     atualizarDadosMutation.isPending && "animate-spin"
                   )} />
-                  {atualizarDadosMutation.isPending ? 'Atualizando...' : 'Atualizar Dados'}
+                  {atualizarDadosMutation.isPending ? 'Iniciando...' : 'Atualizar Dados'}
                 </button>
               )}
               <div className={clsx(
@@ -180,6 +216,34 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="card-body">
+          {/* Barra de Progresso - mostrar quando downloading */}
+          {isAdmin && progressoDownload?.status === 'downloading' && (
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <ArrowPathIcon className="w-5 h-5 text-blue-600 animate-spin" />
+                  <span className="font-semibold text-blue-800">Download em Andamento</span>
+                </div>
+                <span className="text-sm font-bold text-blue-600">{progressoDownload.percent}%</span>
+              </div>
+              
+              {/* Barra de progresso */}
+              <div className="w-full bg-blue-200 rounded-full h-3 mb-2">
+                <div 
+                  className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${progressoDownload.percent}%` }}
+                />
+              </div>
+              
+              <div className="flex justify-between text-sm text-blue-700">
+                <span>{progressoDownload.message}</span>
+                <span>
+                  {progressoDownload.current.toLocaleString('pt-BR')} / {progressoDownload.total.toLocaleString('pt-BR')}
+                </span>
+              </div>
+            </div>
+          )}
+
           {statusDados?.disponivel ? (
             <div className="flex items-start gap-4">
               <div className="stat-icon bg-gradient-to-br from-green-100 to-green-50">
@@ -207,7 +271,7 @@ export default function DashboardPage() {
                   Dados Não Disponíveis
                 </p>
                 <p className="text-gray-600 mt-1">
-                  Clique em "Atualizar Dados" para baixar os dados mais recentes
+                  {isAdmin ? 'Clique em "Atualizar Dados" para baixar os dados mais recentes' : 'Aguarde o administrador atualizar os dados'}
                 </p>
               </div>
             </div>
