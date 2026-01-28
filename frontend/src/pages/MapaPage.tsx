@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap, Rectangle, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap, Rectangle, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useQuery, useMutation } from '@tanstack/react-query'
@@ -149,7 +149,7 @@ export default function MapaPage() {
     possui_solar: '',
     tipo_consumidor: '',
     classe: '',
-    limit: 15000,
+    limit: 5000,
   })
   
   // Estados de UI
@@ -239,7 +239,7 @@ export default function MapaPage() {
         possui_solar: result.filters.possui_solar?.toString() || '',
         tipo_consumidor: result.filters.tipo_consumidor || '',
         classe: result.filters.classe || '',
-        limit: result.filters.limit || 15000,
+        limit: result.filters.limit || 5000,
       })
       setShowSavedQueries(false)
       toast.success(`Consulta "${consulta.name}" carregada`)
@@ -489,6 +489,9 @@ export default function MapaPage() {
             <div className="text-center">
               <div className="text-lg font-bold text-blue-600">{mapaData.estatisticas.total_pontos}</div>
               <div className="text-xs text-gray-600">📍 Total</div>
+              {mapaData.estatisticas.total_pontos >= 5000 && (
+                <div className="text-xs text-orange-600 font-medium">⚠️ Limite atingido</div>
+              )}
             </div>
             <div className="text-center">
               <div className="text-lg font-bold text-yellow-600">{mapaData.estatisticas.com_solar}</div>
@@ -581,23 +584,28 @@ export default function MapaPage() {
                   position={[ponto.latitude, ponto.longitude]}
                   icon={icon}
                 >
-                  <Popup>
-                    <div className="min-w-[280px]">
-                      <h3 className="font-bold text-lg text-blue-800 mb-2 flex items-center gap-2">
+                  <Tooltip 
+                    direction="top" 
+                    offset={[0, -8]} 
+                    opacity={0.95}
+                    className="custom-tooltip"
+                  >
+                    <div className="min-w-[220px] max-w-[280px]">
+                      <h3 className="font-bold text-sm text-blue-800 mb-1 flex items-center gap-1">
                         📍 {ponto.titulo || ponto.cod_id}
                         {ponto.possui_solar && <span className="text-yellow-500">☀️</span>}
                       </h3>
                       
                       {/* Badges */}
-                      <div className="flex gap-2 mb-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                      <div className="flex gap-1 mb-2">
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
                           ponto.tipo_consumidor === 'livre' 
                             ? 'bg-green-100 text-green-700' 
                             : 'bg-gray-100 text-gray-700'
                         }`}>
                           {ponto.tipo_consumidor === 'livre' ? '🔓 LIVRE' : '🔒 CATIVO'}
                         </span>
-                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
                           ponto.possui_solar
                             ? 'bg-yellow-100 text-yellow-700' 
                             : 'bg-gray-100 text-gray-600'
@@ -606,8 +614,8 @@ export default function MapaPage() {
                         </span>
                       </div>
                       
-                      {/* Dados */}
-                      <div className="space-y-2 text-sm border-t pt-2">
+                      {/* Dados compactos */}
+                      <div className="space-y-1 text-xs border-t pt-1">
                         <div className="flex justify-between">
                           <span className="text-gray-600">Demanda:</span>
                           <span className="font-bold text-green-700">
@@ -615,7 +623,7 @@ export default function MapaPage() {
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Consumo Médio:</span>
+                          <span className="text-gray-600">Consumo:</span>
                           <span className="font-bold text-blue-700">
                             {ponto.consumo_medio?.toLocaleString('pt-BR', {maximumFractionDigits: 0})} kWh
                           </span>
@@ -625,24 +633,19 @@ export default function MapaPage() {
                           <span className="font-medium">{ponto.classe || '-'}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Grupo Tarifário:</span>
-                          <span className="font-medium">{ponto.grupo_tarifario || '-'}</span>
-                        </div>
-                        <div className="flex justify-between">
                           <span className="text-gray-600">Município:</span>
                           <span className="font-medium">{ponto.municipio || '-'}</span>
                         </div>
                       </div>
                       
-                      <div className="mt-3 pt-2 border-t text-xs text-gray-500 text-center">
-                        📌 {ponto.latitude.toFixed(6)}, {ponto.longitude.toFixed(6)}
-                      </div>
-                      <div className="mt-3 flex gap-2">
+                      {/* Links */}
+                      <div className="mt-2 pt-1 border-t flex gap-1 text-xs">
                         <a
                           href={getStreetViewDirectUrl(ponto.latitude, ponto.longitude)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex-1 text-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors text-sm"
+                          className="flex-1 text-center px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded transition-colors"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           🚶 Street View
                         </a>
@@ -650,13 +653,14 @@ export default function MapaPage() {
                           href={getStreetViewUrl(ponto.latitude, ponto.longitude)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex-1 text-center px-3 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors text-sm"
+                          className="flex-1 text-center px-2 py-1 bg-green-600 hover:bg-green-700 text-white font-semibold rounded transition-colors"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           🛰️ Satélite
                         </a>
                       </div>
                     </div>
-                  </Popup>
+                  </Tooltip>
                 </Marker>
               )
             })}
