@@ -163,6 +163,7 @@ export default function MapaPage() {
   const [queryName, setQueryName] = useState('')
   const [queryDescription, setQueryDescription] = useState('')
   const [pontosNaSelecao, setPontosNaSelecao] = useState<PontoMapaCompleto[]>([])
+  const [shouldFetch, setShouldFetch] = useState(false)
   
   // Carregar opções de filtros (UFs)
   const { data: opcoesFiltros } = useQuery<OpcoesFiltros>({
@@ -221,6 +222,18 @@ export default function MapaPage() {
     return [mapaData.centro.lat, mapaData.centro.lng]
   }, [mapaData])
   
+  // Efeito para buscar dados quando shouldFetch é true (após carregar consulta salva)
+  useEffect(() => {
+    if (shouldFetch) {
+      refetch().then((result) => {
+        if (result.data?.pontos) {
+          toast.success(`${result.data.pontos.length} pontos carregados`)
+        }
+      })
+      setShouldFetch(false)
+    }
+  }, [shouldFetch, filtros, refetch])
+  
   // Buscar dados
   const handleSearch = useCallback(() => {
     refetch().then((result) => {
@@ -246,11 +259,12 @@ export default function MapaPage() {
       })
       setShowSavedQueries(false)
       toast.success(`Consulta "${consulta.name}" carregada`)
-      setTimeout(() => refetch(), 100)
+      // Usar setTimeout para garantir que o estado foi atualizado
+      setTimeout(() => setShouldFetch(true), 50)
     } catch {
       toast.error('Erro ao carregar consulta')
     }
-  }, [refetch])
+  }, [])
   
   // Salvar consulta atual
   const handleSaveQuery = useCallback(() => {
