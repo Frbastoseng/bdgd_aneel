@@ -149,7 +149,7 @@ export default function MapaPage() {
     possui_solar: '',
     tipo_consumidor: '',
     classe: '',
-    limit: 5000,
+    limit: 15000,
   })
   
   // Estados de UI
@@ -239,7 +239,7 @@ export default function MapaPage() {
         possui_solar: result.filters.possui_solar?.toString() || '',
         tipo_consumidor: result.filters.tipo_consumidor || '',
         classe: result.filters.classe || '',
-        limit: result.filters.limit || 5000,
+        limit: result.filters.limit || 15000,
       })
       setShowSavedQueries(false)
       toast.success(`Consulta "${consulta.name}" carregada`)
