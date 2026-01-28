@@ -127,19 +127,17 @@ function AreaSelector({
   )
 }
 
-// Gera URL do Google Maps que busca a visualização Street View mais próxima
-// Se não tiver Street View exato, mostra o mapa satélite
+// Abre o Google Maps com pin no ponto - usuário pode arrastar o boneco do Street View
 const getStreetViewUrl = (lat: number, lng: number) => {
-  // Vista de satélite com zoom alto
-  return `https://www.google.com/maps/@${lat},${lng},19z/data=!3m1!1e3`
+  // Abre o Maps com o ponto marcado, zoom 19, vista satélite
+  // O usuário pode facilmente arrastar o boneco amarelo para a rua mais próxima
+  return `https://www.google.com/maps/search/${lat},${lng}/@${lat},${lng},19z`
 }
 
-// Gera URL que abre Street View buscando automaticamente a cobertura mais próxima
-// Usa source=apiv3 que é mais tolerante a pontos fora de ruas
+// Abre diretamente em modo Street View na posição mais próxima disponível
 const getStreetViewDirectUrl = (lat: number, lng: number) => {
-  // Esta URL força o Google a buscar a panorama Street View mais próxima
-  // radius=100 busca num raio de 100m, source=outdoor prioriza vias públicas
-  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}&heading=0&pitch=0&fov=90`
+  // Abre o Street View buscando cobertura próxima ao ponto
+  return `https://www.google.com/maps/@${lat},${lng},3a,75y,0h,90t/data=!3m4!1e1!3m2!1s!2e0`
 }
 
 export default function MapaPage() {
@@ -644,22 +642,22 @@ export default function MapaPage() {
                       {/* Links */}
                       <div className="mt-2 pt-1 border-t flex gap-1 text-xs">
                         <a
-                          href={getStreetViewDirectUrl(ponto.latitude, ponto.longitude)}
+                          href={getStreetViewUrl(ponto.latitude, ponto.longitude)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex-1 text-center px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded transition-colors"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          🚶 Street View
+                          📍 Ver no Maps
                         </a>
                         <a
-                          href={getStreetViewUrl(ponto.latitude, ponto.longitude)}
+                          href={getStreetViewDirectUrl(ponto.latitude, ponto.longitude)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex-1 text-center px-2 py-1 bg-green-600 hover:bg-green-700 text-white font-semibold rounded transition-colors"
+                          className="flex-1 text-center px-2 py-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded transition-colors"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          🛰️ Satélite
+                          🚶 Street View
                         </a>
                       </div>
                     </div>
