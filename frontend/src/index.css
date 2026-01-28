@@ -292,3 +292,16 @@
   background: transparent !important;
   border: none !important;
 }
+
+/* Cursor crosshair para seleção de área no mapa */
+.leaflet-container[style*="crosshair"] {
+  cursor: crosshair !important;
+}
+
+.leaflet-container[style*="crosshair"] .leaflet-interactive {
+  cursor: crosshair !important;
+}
+
+.leaflet-container[style*="crosshair"] .leaflet-marker-icon {
+  cursor: crosshair !important;
+}

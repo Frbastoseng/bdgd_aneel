@@ -40,7 +40,7 @@ function MapController({ center, zoom }: { center: [number, number]; zoom: numbe
   return null
 }
 
-// Componente para seleção de área
+// Componente para seleção de área com cursor de crosshair
 function AreaSelector({ 
   isSelecting, 
   onSelect, 
@@ -52,6 +52,24 @@ function AreaSelector({
 }) {
   const [startPoint, setStartPoint] = useState<L.LatLng | null>(null)
   const [endPoint, setEndPoint] = useState<L.LatLng | null>(null)
+  const map = useMap()
+  
+  // Mudar cursor quando em modo de seleção
+  useEffect(() => {
+    const container = map.getContainer()
+    if (isSelecting) {
+      container.style.cursor = 'crosshair'
+      // Desabilitar drag do mapa durante seleção
+      map.dragging.disable()
+    } else {
+      container.style.cursor = ''
+      map.dragging.enable()
+    }
+    return () => {
+      container.style.cursor = ''
+      map.dragging.enable()
+    }
+  }, [isSelecting, map])
   
   useMapEvents({
     mousedown(e) {
@@ -69,7 +87,15 @@ function AreaSelector({
       if (isSelecting && startPoint) {
         setEndPoint(e.latlng)
         const bounds = L.latLngBounds(startPoint, e.latlng)
-        onSelect(bounds)
+        // Só seleciona se a área tiver um tamanho mínimo
+        const pixelBounds = map.latLngToContainerPoint(startPoint)
+        const pixelEnd = map.latLngToContainerPoint(e.latlng)
+        const width = Math.abs(pixelBounds.x - pixelEnd.x)
+        const height = Math.abs(pixelBounds.y - pixelEnd.y)
+        
+        if (width > 20 && height > 20) {
+          onSelect(bounds)
+        }
         setStartPoint(null)
         setEndPoint(null)
       }
@@ -91,11 +117,11 @@ function AreaSelector({
     <Rectangle
       bounds={bounds}
       pathOptions={{
-        color: '#3b82f6',
-        weight: 2,
-        fillColor: '#3b82f6',
-        fillOpacity: 0.2,
-        dashArray: '5, 5'
+        color: '#f97316',
+        weight: 3,
+        fillColor: '#f97316',
+        fillOpacity: 0.15,
+        dashArray: '8, 4'
       }}
     />
   )
@@ -656,10 +682,18 @@ export default function MapaPage() {
           </div>
         )}
         
-        {/* Instruções de seleção */}
+        {/* Instruções de seleção - mais visíveis */}
         {isSelecting && (
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-orange-500 text-white px-4 py-2 rounded-lg shadow-lg z-[1000] animate-pulse">
-            📐 Clique e arraste para selecionar uma área
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000]">
+            <div className="bg-orange-600 text-white px-6 py-3 rounded-xl shadow-2xl border-2 border-orange-400">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">✛</span>
+                <div>
+                  <p className="font-bold text-lg">Modo Seleção Ativo</p>
+                  <p className="text-sm text-orange-100">Clique e arraste para desenhar um retângulo • ESC para cancelar</p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
