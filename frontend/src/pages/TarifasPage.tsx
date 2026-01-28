@@ -11,7 +11,7 @@ export default function TarifasPage() {
   
   const { register, handleSubmit, reset } = useForm<FiltroTarifas>({
     defaultValues: {
-      apenas_ultima_tarifa: false,
+      apenas_ultima_tarifa: true,
     },
   })
   
@@ -241,12 +241,27 @@ export default function TarifasPage() {
                     }
                   </span>
                 </div>
-                <p className="text-sm text-gray-600">{tarifa.dsc_reh}</p>
+                <p className="text-sm text-gray-600 truncate">{tarifa.dsc_reh}</p>
+                
+                {/* Modalidade e Subgrupo */}
+                <div className="flex flex-wrap gap-1">
+                  {tarifa.dsc_sub_grupo && (
+                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
+                      {tarifa.dsc_sub_grupo}
+                    </span>
+                  )}
+                  {tarifa.dsc_modalidade_tarifaria && (
+                    <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">
+                      {tarifa.dsc_modalidade_tarifaria}
+                    </span>
+                  )}
+                </div>
+                
                 <div className="grid grid-cols-2 gap-2 pt-2">
                   <div className="bg-white rounded-lg p-2">
                     <span className="text-xs text-gray-500">TUSD</span>
-                    <p className="font-mono font-semibold text-green-700">
-                      R$ {tarifa.vlr_tusd?.toLocaleString('pt-BR', { 
+                    <p className="font-mono font-semibold text-green-700 text-sm">
+                      {tarifa.vlr_tusd?.toLocaleString('pt-BR', { 
                         minimumFractionDigits: 4,
                         maximumFractionDigits: 4 
                       })}
@@ -254,8 +269,8 @@ export default function TarifasPage() {
                   </div>
                   <div className="bg-white rounded-lg p-2">
                     <span className="text-xs text-gray-500">TE</span>
-                    <p className="font-mono font-semibold text-blue-700">
-                      R$ {tarifa.vlr_te?.toLocaleString('pt-BR', { 
+                    <p className="font-mono font-semibold text-blue-700 text-sm">
+                      {tarifa.vlr_te?.toLocaleString('pt-BR', { 
                         minimumFractionDigits: 4,
                         maximumFractionDigits: 4 
                       })}
