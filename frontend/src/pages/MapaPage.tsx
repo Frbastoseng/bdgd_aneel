@@ -6,19 +6,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { aneelApi } from '@/services/api'
 import type { MapaAvancadoResponse, PontoMapaCompleto, ConsultaSalva, OpcoesFiltros } from '@/types'
 import toast from 'react-hot-toast'
-import {
-  MapPinIcon,
-  MagnifyingGlassIcon,
-  ArrowDownTrayIcon,
-  BookmarkIcon,
-  TrashIcon,
-  XMarkIcon,
-  Squares2X2Icon,
-  SunIcon,
-  BoltIcon,
-  UserGroupIcon,
-} from '@heroicons/react/24/outline'
-import { BookmarkIcon as BookmarkSolidIcon } from '@heroicons/react/24/solid'
+import { MagnifyingGlassIcon, MapPinIcon } from '@heroicons/react/24/outline'
 
 // Ícones customizados para Leaflet
 const createCustomIcon = (color: string, size = 12) => L.divIcon({
@@ -40,13 +28,6 @@ const solarLivreIcon = createCustomIcon('#22c55e')
 const solarCativoIcon = createCustomIcon('#84cc16')
 const normalLivreIcon = createCustomIcon('#3b82f6')
 const normalCativoIcon = createCustomIcon('#6366f1')
-
-const getMarkerIcon = (ponto: PontoMapaCompleto) => {
-  if (ponto.possui_solar && ponto.tipo_consumidor === 'Livre') return solarLivreIcon
-  if (ponto.possui_solar) return solarCativoIcon
-  if (ponto.tipo_consumidor === 'Livre') return normalLivreIcon
-  return normalCativoIcon
-}
 
 // Componente para controlar o mapa
 function MapController({ center, zoom }: { center: [number, number]; zoom: number }) {
@@ -538,8 +519,9 @@ export default function MapaPage() {
             />
             <MapController center={mapCenter} zoom={mapaData.zoom || 6} />
             <AreaSelector 
-              isActive={isSelecting} 
+              isSelecting={isSelecting} 
               onSelect={handleAreaSelect}
+              onCancel={() => setIsSelecting(false)}
             />
             
             {/* Retângulo da seleção */}
