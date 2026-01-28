@@ -400,7 +400,7 @@ export default function ConsultaPage() {
       const result = await aneelApi.usarConsultaSalva(consulta.id)
       const f = result.filters
       
-      // Aplicar filtros salvos
+      // Aplicar filtros salvos (para atualizar a UI)
       setSelectedUf(f.uf || '')
       setSelectedMunicipios(f.municipios || [])
       setSelectedMicrorregioes(f.microrregioes || [])
@@ -440,6 +440,9 @@ export default function ConsultaPage() {
       
       setShowSavedQueries(false)
       toast.success(`Consulta "${consulta.name}" carregada`)
+      
+      // Executar busca diretamente com os filtros salvos (não depende dos estados)
+      consultaMutation.mutate(f)
     } catch {
       toast.error('Erro ao carregar consulta')
     }
