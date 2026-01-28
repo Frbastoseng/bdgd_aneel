@@ -9,6 +9,7 @@ from pathlib import Path
 import asyncio
 from datetime import datetime
 import io
+import logging
 
 from app.core.config import settings
 from app.schemas.aneel import (
@@ -20,9 +21,32 @@ from app.schemas.aneel import (
     PontoMapa
 )
 
-# Diretório de dados
-DATA_DIR = Path(__file__).parent.parent.parent / "data"
-DATA_DIR.mkdir(exist_ok=True)
+# Configurar logging
+logger = logging.getLogger(__name__)
+
+# Diretório de dados - tenta múltiplos caminhos para compatibilidade
+def _get_data_dir() -> Path:
+    """Encontra o diretório de dados, checando múltiplos caminhos possíveis."""
+    # Caminho 1: Relativo ao arquivo (para desenvolvimento)
+    path1 = Path(__file__).parent.parent.parent / "data"
+    
+    # Caminho 2: /app/data (para Docker)
+    path2 = Path("/app/data")
+    
+    # Caminho 3: Diretório atual + data
+    path3 = Path.cwd() / "data"
+    
+    for path in [path2, path1, path3]:
+        if path.exists():
+            logger.info(f"Usando diretório de dados: {path}")
+            return path
+    
+    # Se nenhum existe, cria o primeiro
+    path1.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Criado diretório de dados: {path1}")
+    return path1
+
+DATA_DIR = _get_data_dir()
 
 ANEEL_DATA_FILE = DATA_DIR / "dados_aneel.parquet"
 TARIFAS_DATA_FILE = DATA_DIR / "tarifas_aneel.parquet"
@@ -93,24 +117,34 @@ class ANEELService:
         if _cache_localidades is not None:
             return _cache_localidades
         
+        logger.info(f"Tentando carregar localidades de {MUNICIPIOS_FILE}")
+        
         if MUNICIPIOS_FILE.exists():
             try:
                 _cache_localidades = pd.read_parquet(MUNICIPIOS_FILE)
+                logger.info(f"Localidades carregadas do parquet: {len(_cache_localidades)} registros")
+                logger.info(f"Colunas disponíveis: {list(_cache_localidades.columns)}")
                 return _cache_localidades
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Erro ao carregar parquet de municípios: {e}")
 
         for src in MUNICIPIOS_SOURCES:
+            logger.info(f"Tentando carregar localidades de {src}")
             if src.exists():
                 try:
                     df_loc = pd.read_excel(src, dtype=str)
                     df_loc.columns = df_loc.columns.str.strip()
                     df_loc.to_parquet(MUNICIPIOS_FILE, index=False)
                     _cache_localidades = df_loc
+                    logger.info(f"Localidades carregadas do Excel e salvas em parquet: {len(df_loc)} registros")
                     return _cache_localidades
-                except Exception:
+                except Exception as e:
+                    logger.warning(f"Erro ao carregar Excel {src}: {e}")
                     continue
 
+        logger.warning("Nenhuma base de localidades encontrada!")
+        logger.warning(f"Diretório de dados: {DATA_DIR}")
+        logger.warning(f"Arquivos no diretório: {list(DATA_DIR.iterdir()) if DATA_DIR.exists() else 'Diretório não existe'}")
         return pd.DataFrame()
 
     @staticmethod

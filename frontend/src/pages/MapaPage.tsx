@@ -78,26 +78,26 @@ export default function MapaPage() {
   }
   
   return (
-    <div className="h-[calc(100vh-8rem)] flex flex-col space-y-4">
+    <div className="min-h-[calc(100vh-8rem)] flex flex-col space-y-4">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-blue-600 to-green-500 text-white p-6">
+      <div className="relative overflow-hidden rounded-xl md:rounded-2xl bg-gradient-to-r from-blue-700 via-blue-600 to-green-500 text-white p-4 md:p-6">
         <div className="relative z-10">
-          <h1 className="text-3xl font-bold">🗺️ Mapa de Clientes</h1>
-          <p className="text-lg text-white/90 mt-1">
-            Visualize a localização dos clientes BDGD com OpenStreetMap
+          <h1 className="text-xl md:text-3xl font-bold">🗺️ Mapa de Clientes</h1>
+          <p className="text-sm md:text-lg text-white/90 mt-1">
+            Visualize a localização dos clientes BDGD
           </p>
         </div>
-        <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/10" />
+        <div className="absolute -right-8 -top-8 h-24 md:h-32 w-24 md:w-32 rounded-full bg-white/10" />
       </div>
       
       {/* Filtros */}
-      <div className="card p-4">
-        <div className="flex flex-wrap items-end gap-4">
+      <div className="card p-3 md:p-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
           <div>
-            <label className="label font-semibold">Demanda Mínima (kW)</label>
+            <label className="label text-xs md:text-sm font-semibold">Demanda Mín</label>
             <input
               type="number"
-              className="input w-40"
+              className="input text-sm"
               value={filtros.demanda_min}
               onChange={(e) => setFiltros({ ...filtros, demanda_min: e.target.value })}
               placeholder="0"
@@ -105,10 +105,10 @@ export default function MapaPage() {
           </div>
           
           <div>
-            <label className="label font-semibold">Demanda Máxima (kW)</label>
+            <label className="label text-xs md:text-sm font-semibold">Demanda Máx</label>
             <input
               type="number"
-              className="input w-40"
+              className="input text-sm"
               value={filtros.demanda_max}
               onChange={(e) => setFiltros({ ...filtros, demanda_max: e.target.value })}
               placeholder="10000"
@@ -116,46 +116,48 @@ export default function MapaPage() {
           </div>
           
           <div>
-            <label className="label font-semibold">Geração Solar</label>
+            <label className="label text-xs md:text-sm font-semibold">Solar</label>
             <select
-              className="input w-40"
+              className="input text-sm"
               value={filtros.possui_solar}
               onChange={(e) => setFiltros({ ...filtros, possui_solar: e.target.value })}
             >
               <option value="">Todos</option>
-              <option value="true">☀️ Com Solar</option>
-              <option value="false">Sem Solar</option>
+              <option value="true">☀️ Com</option>
+              <option value="false">Sem</option>
             </select>
           </div>
           
-          <button
-            onClick={handleSearch}
-            disabled={isFetching}
-            className="btn-primary text-lg px-6 py-3"
-          >
-            {isFetching ? (
-              <span className="spinner mr-2" />
-            ) : (
-              <MagnifyingGlassIcon className="w-5 h-5 mr-2" />
-            )}
-            🔍 Carregar Pontos
-          </button>
-          
-          {mapaData?.pontos && (
-            <span className="text-lg font-semibold text-primary-600">
-              📍 {mapaData.pontos.length} pontos no mapa
-            </span>
-          )}
+          <div className="col-span-2 sm:col-span-1 flex flex-col justify-end">
+            <button
+              onClick={handleSearch}
+              disabled={isFetching}
+              className="btn-primary text-sm md:text-base px-4 py-2 md:px-6 md:py-3 w-full"
+            >
+              {isFetching ? (
+                <span className="spinner mr-1" />
+              ) : (
+                <MagnifyingGlassIcon className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
+              )}
+              🔍 Buscar
+            </button>
+          </div>
         </div>
+        
+        {mapaData?.pontos && (
+          <p className="text-sm md:text-base font-semibold text-primary-600 mt-3 text-center">
+            📍 {mapaData.pontos.length} pontos no mapa
+          </p>
+        )}
       </div>
       
       {/* Mapa com Leaflet */}
-      <div className="flex-1 card relative overflow-hidden">
+      <div className="flex-1 card relative overflow-hidden" style={{ minHeight: 'clamp(350px, 50vh, 600px)' }}>
         {mapaData?.pontos && mapaData.pontos.length > 0 ? (
           <MapContainer
             center={[mapCenter.lat, mapCenter.lng]}
             zoom={mapaData.pontos.length === 1 ? 14 : 5}
-            style={{ height: '100%', width: '100%', minHeight: '500px' }}
+            style={{ height: '100%', width: '100%' }}
             scrollWheelZoom={true}
           >
             <TileLayer
@@ -223,30 +225,30 @@ export default function MapaPage() {
             ))}
           </MapContainer>
         ) : (
-          <div className="h-full min-h-[500px] flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-            <div className="text-center p-8">
-              <MapPinIcon className="w-20 h-20 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-2xl font-bold text-gray-700 mb-2">
+          <div className="h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+            <div className="text-center p-4 md:p-8">
+              <MapPinIcon className="w-12 h-12 md:w-20 md:h-20 text-gray-300 mx-auto mb-3 md:mb-4" />
+              <h3 className="text-lg md:text-2xl font-bold text-gray-700 mb-2">
                 Nenhum ponto carregado
               </h3>
-              <p className="text-gray-500 max-w-md">
-                Use os filtros acima e clique em <strong>"Carregar Pontos"</strong> para visualizar os clientes no mapa
+              <p className="text-sm md:text-base text-gray-500 max-w-md">
+                Use os filtros e clique em <strong>"Buscar"</strong> para visualizar
               </p>
             </div>
           </div>
         )}
         
-        {/* Legenda */}
+        {/* Legenda - responsiva */}
         {mapaData?.pontos && mapaData.pontos.length > 0 && (
-          <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg p-3 text-sm z-[1000]">
-            <div className="font-bold text-gray-800 mb-2">Legenda:</div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-4 h-4 rounded-full bg-green-500 border-2 border-white shadow"></span>
-              <span>Com Geração Solar</span>
+          <div className="absolute bottom-2 left-2 md:bottom-4 md:left-4 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg p-2 md:p-3 text-xs md:text-sm z-[1000]">
+            <div className="font-bold text-gray-800 mb-1 md:mb-2">Legenda:</div>
+            <div className="flex items-center gap-1.5 md:gap-2 mb-1">
+              <span className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-green-500 border-2 border-white shadow"></span>
+              <span className="text-[10px] md:text-xs">Solar</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="w-4 h-4 rounded-full bg-blue-500 border-2 border-white shadow"></span>
-              <span>Sem Geração Solar</span>
+            <div className="flex items-center gap-1.5 md:gap-2">
+              <span className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-blue-500 border-2 border-white shadow"></span>
+              <span className="text-[10px] md:text-xs">Sem Solar</span>
             </div>
           </div>
         )}

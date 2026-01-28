@@ -48,20 +48,20 @@ export default function TarifasPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Consulta de Tarifas</h1>
-          <p className="text-gray-600">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Consulta de Tarifas</h1>
+          <p className="text-sm sm:text-base text-gray-600">
             Pesquise tarifas de energia das distribuidoras
           </p>
         </div>
         <button
           onClick={() => atualizarMutation.mutate()}
           disabled={atualizarMutation.isPending}
-          className="btn-outline"
+          className="btn-outline text-sm sm:text-base"
         >
-          <ArrowPathIcon className="w-5 h-5 mr-2" />
-          Atualizar Dados
+          <ArrowPathIcon className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2" />
+          Atualizar
         </button>
       </div>
       
@@ -163,30 +163,30 @@ export default function TarifasPage() {
             </p>
           </div>
           
-          {/* Tabela */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          {/* Tabela - Desktop */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full min-w-[700px]">
               <thead className="bg-gray-50 border-y border-gray-200">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Distribuidora
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     REH
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Posto Tarifário
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                    Posto
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Unidade
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     TUSD (R$)
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     TE (R$)
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Vigência
                   </th>
                 </tr>
@@ -194,31 +194,31 @@ export default function TarifasPage() {
               <tbody className="divide-y divide-gray-200">
                 {resultados.tarifas.map((tarifa, idx) => (
                   <tr key={idx} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
                       {tarifa.sig_agente}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
+                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                       {tarifa.dsc_reh}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
+                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                       {tarifa.nom_posto_tarifario}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
+                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                       {tarifa.dsc_unidade_terciaria}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono">
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono whitespace-nowrap">
                       {tarifa.vlr_tusd?.toLocaleString('pt-BR', { 
                         minimumFractionDigits: 6,
                         maximumFractionDigits: 6 
                       })}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono">
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono whitespace-nowrap">
                       {tarifa.vlr_te?.toLocaleString('pt-BR', { 
                         minimumFractionDigits: 6,
                         maximumFractionDigits: 6 
                       })}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 text-center">
+                    <td className="px-4 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
                       {tarifa.dat_fim_vigencia && 
                         new Date(tarifa.dat_fim_vigencia).toLocaleDateString('pt-BR')
                       }
@@ -227,6 +227,43 @@ export default function TarifasPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Cards - Mobile */}
+          <div className="block md:hidden p-4 space-y-3">
+            {resultados.tarifas.map((tarifa, idx) => (
+              <div key={idx} className="bg-gray-50 rounded-xl p-4 space-y-2">
+                <div className="flex justify-between items-start">
+                  <h3 className="font-semibold text-gray-900">{tarifa.sig_agente}</h3>
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                    {tarifa.dat_fim_vigencia && 
+                      new Date(tarifa.dat_fim_vigencia).toLocaleDateString('pt-BR')
+                    }
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600">{tarifa.dsc_reh}</p>
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <div className="bg-white rounded-lg p-2">
+                    <span className="text-xs text-gray-500">TUSD</span>
+                    <p className="font-mono font-semibold text-green-700">
+                      R$ {tarifa.vlr_tusd?.toLocaleString('pt-BR', { 
+                        minimumFractionDigits: 4,
+                        maximumFractionDigits: 4 
+                      })}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-2">
+                    <span className="text-xs text-gray-500">TE</span>
+                    <p className="font-mono font-semibold text-blue-700">
+                      R$ {tarifa.vlr_te?.toLocaleString('pt-BR', { 
+                        minimumFractionDigits: 4,
+                        maximumFractionDigits: 4 
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

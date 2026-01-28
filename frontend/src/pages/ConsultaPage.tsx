@@ -42,6 +42,82 @@ const getStreetViewUrl = (lat: number, lng: number) => {
   return `https://www.google.com/maps/@${lat},${lng},3a,75y,90t/data=!3m6!1e1!3m4!1s!2e0!7i16384!8i8192?entry=ttu`
 }
 
+// Componente de card para visualização mobile
+const MobileCard = memo(({ cliente }: { cliente: ClienteANEEL }) => {
+  const lat = cliente.point_y || cliente.latitude
+  const lng = cliente.point_x || cliente.longitude
+  const hasCoords = lat && lng
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3 shadow-sm">
+      {/* Header do card */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="font-semibold text-gray-900">
+            {cliente.nome_municipio || cliente.mun || 'Cliente'}
+          </h3>
+          <p className="text-sm text-gray-500">{cliente.nome_uf || '-'}</p>
+        </div>
+        <span className={clsx(
+          'px-2 py-1 rounded-full text-xs font-medium',
+          cliente.possui_solar 
+            ? 'bg-green-100 text-green-700' 
+            : 'bg-gray-100 text-gray-600'
+        )}>
+          {cliente.possui_solar ? '☀️ Solar' : 'Sem Solar'}
+        </span>
+      </div>
+      
+      {/* Grid de informações */}
+      <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="bg-gray-50 rounded-lg p-2">
+          <span className="text-gray-500 text-xs">Classe</span>
+          <p className="font-medium text-gray-900 truncate">
+            {cliente.clas_sub_descricao || cliente.clas_sub || '-'}
+          </p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-2">
+          <span className="text-gray-500 text-xs">Grupo</span>
+          <p className="font-medium text-gray-900">{cliente.gru_tar || '-'}</p>
+        </div>
+        <div className="bg-green-50 rounded-lg p-2">
+          <span className="text-gray-500 text-xs">Demanda</span>
+          <p className="font-semibold text-green-700">
+            {cliente.dem_cont?.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) || '-'} kW
+          </p>
+        </div>
+        <div className="bg-blue-50 rounded-lg p-2">
+          <span className="text-gray-500 text-xs">Energia Máx</span>
+          <p className="font-semibold text-blue-700">
+            {cliente.ene_max?.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) || '-'} kWh
+          </p>
+        </div>
+      </div>
+      
+      {/* Botões de ação */}
+      <div className="flex gap-2">
+        <span className={clsx(
+          'flex-1 text-center px-3 py-1.5 rounded-lg text-xs font-medium',
+          cliente.liv === 1 ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
+        )}>
+          {cliente.liv === 1 ? '🔓 Livre' : cliente.liv === 0 ? '🔒 Cativo' : '-'}
+        </span>
+        {hasCoords && (
+          <a
+            href={getStreetViewUrl(Number(lat), Number(lng))}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 text-center px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold rounded-lg text-xs transition-colors"
+          >
+            🚶 Street View
+          </a>
+        )}
+      </div>
+    </div>
+  )
+})
+MobileCard.displayName = 'MobileCard'
+
 // Componente memoizado para linha da tabela (evita re-renders)
 const TableRow = memo(({ cliente }: { cliente: ClienteANEEL }) => {
   const lat = cliente.point_y || cliente.latitude
@@ -50,19 +126,19 @@ const TableRow = memo(({ cliente }: { cliente: ClienteANEEL }) => {
   
   return (
     <tr className="hover:bg-blue-50 transition-colors">
-      <td className="px-2 py-1.5 text-xs font-semibold text-gray-900">
+      <td className="px-2 py-1.5 text-xs font-semibold text-gray-900 whitespace-nowrap">
         {cliente.nome_uf || '-'}
       </td>
-      <td className="px-2 py-1.5 text-xs text-gray-800">
+      <td className="px-2 py-1.5 text-xs text-gray-800 whitespace-nowrap">
         {cliente.nome_municipio || cliente.mun || '-'}
       </td>
-      <td className="px-2 py-1.5 text-xs text-gray-600">
+      <td className="px-2 py-1.5 text-xs text-gray-600 max-w-[150px] truncate">
         {cliente.clas_sub_descricao || cliente.clas_sub || '-'}
       </td>
-      <td className="px-2 py-1.5 text-xs text-gray-600 font-medium">
+      <td className="px-2 py-1.5 text-xs text-gray-600 font-medium whitespace-nowrap">
         {cliente.gru_tar || '-'}
       </td>
-      <td className="px-2 py-1.5 text-xs text-center">
+      <td className="px-2 py-1.5 text-xs text-center whitespace-nowrap">
         <span className={clsx(
           'px-1.5 py-0.5 rounded text-xs font-medium',
           cliente.liv === 1 ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
@@ -70,13 +146,13 @@ const TableRow = memo(({ cliente }: { cliente: ClienteANEEL }) => {
           {cliente.liv === 1 ? 'Livre' : cliente.liv === 0 ? 'Cativo' : '-'}
         </span>
       </td>
-      <td className="px-2 py-1.5 text-xs text-right font-mono font-semibold text-green-700">
+      <td className="px-2 py-1.5 text-xs text-right font-mono font-semibold text-green-700 whitespace-nowrap">
         {cliente.dem_cont?.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) || '-'}
       </td>
-      <td className="px-2 py-1.5 text-xs text-right font-mono text-gray-600">
+      <td className="px-2 py-1.5 text-xs text-right font-mono text-gray-600 whitespace-nowrap">
         {cliente.car_inst?.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) || '-'}
       </td>
-      <td className="px-2 py-1.5 text-xs text-right font-mono font-semibold text-blue-700">
+      <td className="px-2 py-1.5 text-xs text-right font-mono font-semibold text-blue-700 whitespace-nowrap">
         {cliente.ene_max?.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) || '-'}
       </td>
       <td className="px-2 py-1.5 text-center">
@@ -89,7 +165,7 @@ const TableRow = memo(({ cliente }: { cliente: ClienteANEEL }) => {
           {cliente.possui_solar ? '☀️' : '—'}
         </span>
       </td>
-      <td className="px-2 py-1.5 text-center">
+      <td className="px-2 py-1.5 text-center whitespace-nowrap">
         {hasCoords ? (
           <a
             href={getStreetViewUrl(Number(lat), Number(lng))}
@@ -764,83 +840,90 @@ export default function ConsultaPage() {
                 </p>
               </div>
               
-              {/* Botões de Download Destacados */}
-              <div className="flex flex-wrap items-center gap-2">
+              {/* Botões de Download - responsivos */}
+              <div className="grid grid-cols-3 gap-2 w-full sm:w-auto sm:flex sm:flex-wrap">
                 <button
                   onClick={() => exportarCsvMutation.mutate()}
                   disabled={exportarCsvMutation.isPending}
-                  className="inline-flex items-center px-5 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors disabled:opacity-50 text-base shadow-lg hover:shadow-xl"
+                  className="inline-flex items-center justify-center px-3 py-2 sm:px-5 sm:py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors disabled:opacity-50 text-sm sm:text-base shadow-lg hover:shadow-xl"
                 >
                   {exportarCsvMutation.isPending ? (
-                    <span className="spinner mr-2" />
+                    <span className="spinner mr-1" />
                   ) : (
-                    <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
+                    <ArrowDownTrayIcon className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2" />
                   )}
-                  📥 CSV
+                  <span className="hidden sm:inline">📥</span> CSV
                 </button>
                 <button
                   onClick={() => exportarXlsxMutation.mutate()}
                   disabled={exportarXlsxMutation.isPending}
-                  className="inline-flex items-center px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors disabled:opacity-50 text-base shadow-lg hover:shadow-xl"
+                  className="inline-flex items-center justify-center px-3 py-2 sm:px-5 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors disabled:opacity-50 text-sm sm:text-base shadow-lg hover:shadow-xl"
                 >
                   {exportarXlsxMutation.isPending ? (
-                    <span className="spinner mr-2" />
+                    <span className="spinner mr-1" />
                   ) : (
-                    <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
+                    <ArrowDownTrayIcon className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2" />
                   )}
-                  📥 XLSX
+                  <span className="hidden sm:inline">📥</span> XLSX
                 </button>
                 <button
                   onClick={() => exportarKmlMutation.mutate()}
                   disabled={exportarKmlMutation.isPending}
-                  className="inline-flex items-center px-5 py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-lg transition-colors disabled:opacity-50 text-base shadow-lg hover:shadow-xl"
+                  className="inline-flex items-center justify-center px-3 py-2 sm:px-5 sm:py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-lg transition-colors disabled:opacity-50 text-sm sm:text-base shadow-lg hover:shadow-xl"
                 >
                   {exportarKmlMutation.isPending ? (
-                    <span className="spinner mr-2" />
+                    <span className="spinner mr-1" />
                   ) : (
-                    <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
+                    <ArrowDownTrayIcon className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2" />
                   )}
-                  📥 KML
+                  <span className="hidden sm:inline">📥</span> KML
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Tabela Compacta com Todas as Informações */}
-          <div className="card">
-            <div className="overflow-x-auto max-h-64 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-100 border-y border-gray-200 sticky top-0">
+          {/* Visualização Mobile - Cards */}
+          <div className="block md:hidden space-y-3">
+            {resultados.dados.map((cliente, idx) => (
+              <MobileCard key={cliente.cod_id || idx} cliente={cliente} />
+            ))}
+          </div>
+
+          {/* Tabela Desktop - Oculta em Mobile */}
+          <div className="hidden md:block card">
+            <div className="overflow-x-auto max-h-96 overflow-y-auto">
+              <table className="w-full text-sm min-w-[800px]">
+                <thead className="bg-gray-100 border-y border-gray-200 sticky top-0 z-10">
                   <tr>
-                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase whitespace-nowrap">
                       UF
                     </th>
-                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase whitespace-nowrap">
                       Município
                     </th>
-                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase whitespace-nowrap">
                       Classe
                     </th>
-                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase">
+                    <th className="px-2 py-2 text-left text-xs font-bold text-gray-700 uppercase whitespace-nowrap">
                       Grupo
                     </th>
-                    <th className="px-2 py-2 text-center text-xs font-bold text-gray-700 uppercase">
+                    <th className="px-2 py-2 text-center text-xs font-bold text-gray-700 uppercase whitespace-nowrap">
                       LIV
                     </th>
-                    <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase">
+                    <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase whitespace-nowrap">
                       Demanda
                     </th>
-                    <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase">
+                    <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase whitespace-nowrap">
                       Carga Inst.
                     </th>
-                    <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase">
+                    <th className="px-2 py-2 text-right text-xs font-bold text-gray-700 uppercase whitespace-nowrap">
                       Energia Máx
                     </th>
-                    <th className="px-2 py-2 text-center text-xs font-bold text-gray-700 uppercase">
+                    <th className="px-2 py-2 text-center text-xs font-bold text-gray-700 uppercase whitespace-nowrap">
                       Solar
                     </th>
-                    <th className="px-2 py-2 text-center text-xs font-bold text-gray-700 uppercase">
-                      📍 Street View
+                    <th className="px-2 py-2 text-center text-xs font-bold text-gray-700 uppercase whitespace-nowrap">
+                      📍 Ver
                     </th>
                   </tr>
                 </thead>
@@ -852,12 +935,12 @@ export default function ConsultaPage() {
               </table>
             </div>
             
-            {/* Paginação */}
+            {/* Paginação Desktop */}
             <div className="px-4 py-3 border-t bg-gray-50 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <p className="text-sm text-gray-600">
-                Mostrando <span className="font-bold">{((resultados.page - 1) * resultados.per_page) + 1}</span> a{' '}
+              <p className="text-sm text-gray-600 text-center sm:text-left">
+                <span className="font-bold">{((resultados.page - 1) * resultados.per_page) + 1}</span>-
                 <span className="font-bold">{Math.min(resultados.page * resultados.per_page, resultados.total)}</span> de{' '}
-                <span className="font-bold text-primary-600">{resultados.total.toLocaleString('pt-BR')}</span> resultados
+                <span className="font-bold text-primary-600">{resultados.total.toLocaleString('pt-BR')}</span>
               </p>
               
               <div className="flex items-center gap-2">
@@ -888,17 +971,54 @@ export default function ConsultaPage() {
             </div>
           </div>
 
+          {/* Paginação Mobile */}
+          <div className="block md:hidden card p-4">
+            <div className="flex flex-col items-center gap-3">
+              <p className="text-sm text-gray-600 text-center">
+                <span className="font-bold">{((resultados.page - 1) * resultados.per_page) + 1}</span>-
+                <span className="font-bold">{Math.min(resultados.page * resultados.per_page, resultados.total)}</span> de{' '}
+                <span className="font-bold text-primary-600">{resultados.total.toLocaleString('pt-BR')}</span>
+              </p>
+              
+              <div className="flex items-center gap-2 w-full">
+                <button
+                  disabled={resultados.page <= 1}
+                  onClick={() => {
+                    const formData = buildFiltros()
+                    consultaMutation.mutate({ ...formData, page: resultados.page - 1 })
+                  }}
+                  className="flex-1 btn-outline text-sm px-3 py-2 font-semibold"
+                >
+                  ← Anterior
+                </button>
+                <span className="px-3 py-1 bg-primary-100 text-primary-700 font-bold rounded-lg text-sm">
+                  {resultados.page}/{resultados.total_pages}
+                </span>
+                <button
+                  disabled={resultados.page >= resultados.total_pages}
+                  onClick={() => {
+                    const formData = buildFiltros()
+                    consultaMutation.mutate({ ...formData, page: resultados.page + 1 })
+                  }}
+                  className="flex-1 btn-outline text-sm px-3 py-2 font-semibold"
+                >
+                  Próxima →
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Mapa Integrado com Leaflet (OpenStreetMap - Gratuito) */}
-          <div className="card ring-4 ring-primary-200 ring-offset-2 shadow-2xl">
-            <div className="px-6 py-5 border-b bg-gradient-to-r from-primary-600 to-blue-600">
-              <h2 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-3">
-                <MapPinIcon className="w-8 h-8 text-white" />
-                🗺️ Mapa de Localização
+          <div className="card ring-2 md:ring-4 ring-primary-200 ring-offset-1 md:ring-offset-2 shadow-xl md:shadow-2xl">
+            <div className="px-4 py-4 md:px-6 md:py-5 border-b bg-gradient-to-r from-primary-600 to-blue-600">
+              <h2 className="text-xl md:text-3xl font-bold text-white flex items-center gap-2 md:gap-3">
+                <MapPinIcon className="w-6 h-6 md:w-8 md:h-8 text-white" />
+                🗺️ Mapa
               </h2>
-              <p className="text-base text-primary-100 mt-1">
+              <p className="text-sm md:text-base text-primary-100 mt-1">
                 {pontosValidos.length > 0 
-                  ? `📍 ${pontosValidos.length} pontos plotados no mapa • Clique nos marcadores para detalhes`
-                  : 'Pontos com coordenadas válidas serão exibidos aqui'}
+                  ? `📍 ${pontosValidos.length} pontos • Clique para detalhes`
+                  : 'Sem coordenadas válidas'}
               </p>
             </div>
             
@@ -907,7 +1027,7 @@ export default function ConsultaPage() {
                 <MapContainer
                   center={[mapCenter.lat, mapCenter.lng]}
                   zoom={pontosValidos.length === 1 ? 14 : 5}
-                  style={{ height: '700px', width: '100%' }}
+                  style={{ height: 'clamp(350px, 60vh, 700px)', width: '100%' }}
                   scrollWheelZoom={true}
                 >
                   <TileLayer
@@ -975,26 +1095,28 @@ export default function ConsultaPage() {
                   })}
                 </MapContainer>
               ) : (
-                <div className="h-[450px] flex items-center justify-center bg-gray-50">
-                  <div className="text-center">
-                    <MapPinIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                    <p className="text-gray-500">Nenhum ponto com coordenadas para exibir</p>
+                <div className="h-[250px] md:h-[350px] flex items-center justify-center bg-gray-50">
+                  <div className="text-center p-4">
+                    <MapPinIcon className="w-12 h-12 md:w-16 md:h-16 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500 text-sm md:text-base">Nenhum ponto com coordenadas</p>
                   </div>
                 </div>
               )}
               
-              {/* Legenda */}
-              <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg p-3 text-xs z-[1000]">
-                <div className="font-bold text-gray-800 mb-2">Legenda:</div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="w-4 h-4 rounded-full bg-green-500 border-2 border-white shadow"></span>
-                  <span>Com Geração Solar</span>
+              {/* Legenda - responsiva */}
+              {pontosValidos.length > 0 && (
+                <div className="absolute bottom-2 left-2 md:bottom-4 md:left-4 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg p-2 md:p-3 text-xs z-[1000]">
+                  <div className="font-bold text-gray-800 mb-1 md:mb-2">Legenda:</div>
+                  <div className="flex items-center gap-1.5 md:gap-2 mb-1">
+                    <span className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-green-500 border-2 border-white shadow"></span>
+                    <span className="text-[10px] md:text-xs">Solar</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 md:gap-2">
+                    <span className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-blue-500 border-2 border-white shadow"></span>
+                    <span className="text-[10px] md:text-xs">Sem Solar</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded-full bg-blue-500 border-2 border-white shadow"></span>
-                  <span>Sem Geração Solar</span>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

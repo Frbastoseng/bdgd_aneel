@@ -298,6 +298,56 @@ async def status_dados(
     }
 
 
+@router.get("/status-localidades")
+async def status_localidades(
+    current_user: User = Depends(get_current_active_user)
+):
+    """Retorna status da base de localidades (IBGE)"""
+    from pathlib import Path
+    from datetime import datetime
+    import os
+    
+    # Tentar vários caminhos
+    paths_to_check = [
+        Path("/app/data"),
+        Path(__file__).parent.parent.parent.parent / "data",
+        Path.cwd() / "data"
+    ]
+    
+    result = {
+        "data_dir_found": None,
+        "municipios_parquet": False,
+        "municipios_excel": False,
+        "arquivos_encontrados": [],
+        "ufs_disponiveis": [],
+        "total_municipios": 0
+    }
+    
+    for data_path in paths_to_check:
+        if data_path.exists():
+            result["data_dir_found"] = str(data_path)
+            result["arquivos_encontrados"] = [f.name for f in data_path.iterdir() if f.is_file()]
+            
+            municipios_parquet = data_path / "municipios.parquet"
+            municipios_excel = data_path / "RELATORIO_DTB_BRASIL_DISTRITO.xlsx"
+            
+            result["municipios_parquet"] = municipios_parquet.exists()
+            result["municipios_excel"] = municipios_excel.exists()
+            break
+    
+    # Tentar carregar localidades
+    try:
+        df_loc = ANEELService.carregar_localidades()
+        if not df_loc.empty:
+            result["total_municipios"] = len(df_loc)
+            if "Nome_UF" in df_loc.columns:
+                result["ufs_disponiveis"] = sorted(df_loc["Nome_UF"].dropna().unique().tolist())
+    except Exception as e:
+        result["error"] = str(e)
+    
+    return result
+
+
 # ============ Endpoints de Tarifas ============
 
 @router.post("/tarifas/consulta", response_model=TarifasResponse)

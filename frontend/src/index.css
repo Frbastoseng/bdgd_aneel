@@ -224,10 +224,43 @@
   .hide-mobile {
     @apply hidden;
   }
+  
+  /* Melhorias para touch */
+  .btn, .btn-primary, .btn-secondary, .btn-outline {
+    @apply min-h-[44px];
+  }
+  
+  .input, select {
+    @apply min-h-[44px] text-base;
+  }
+  
+  /* Tabelas mobile */
+  .table-container {
+    @apply -mx-4 px-4;
+  }
 }
 
 @media (min-width: 641px) {
   .show-mobile {
     @apply hidden;
+  }
+}
+
+/* Safe area para dispositivos com notch */
+@supports(padding: max(0px)) {
+  .safe-area-inset-bottom {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  
+  .safe-area-inset-top {
+    padding-top: max(1rem, env(safe-area-inset-top));
+  }
+}
+
+/* Scrollbar touch-friendly */
+@media (pointer: coarse) {
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
   }
 }
