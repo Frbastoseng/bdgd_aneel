@@ -1,5 +1,6 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, memo } from 'react'
 import { MapContainer, TileLayer, Marker, Tooltip, useMap, Rectangle, useMapEvents } from 'react-leaflet'
+import MarkerClusterGroup from 'react-leaflet-cluster'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useQuery, useMutation } from '@tanstack/react-query'
@@ -8,28 +9,69 @@ import type { MapaAvancadoResponse, PontoMapaCompleto, ConsultaSalva, OpcoesFilt
 import toast from 'react-hot-toast'
 import { MagnifyingGlassIcon, MapPinIcon } from '@heroicons/react/24/outline'
 
-// Ícones customizados para Leaflet
-const createCustomIcon = (color: string, size = 14) => L.divIcon({
-  className: 'custom-marker',
-  html: `<div style="
-    width: ${size}px;
-    height: ${size}px;
-    background-color: ${color};
-    border: 2px solid white;
-    border-radius: 50%;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-    min-width: ${size}px;
-    min-height: ${size}px;
-  "></div>`,
-  iconSize: [size, size],
-  iconAnchor: [size/2, size/2],
-  popupAnchor: [0, -size/2],
-})
+// Ícones customizados para Leaflet - criados uma única vez
+const iconCache: Record<string, L.DivIcon> = {}
+const createCustomIcon = (color: string, size = 12) => {
+  const key = `${color}-${size}`
+  if (!iconCache[key]) {
+    iconCache[key] = L.divIcon({
+      className: 'custom-marker',
+      html: `<div style="
+        width: ${size}px;
+        height: ${size}px;
+        background-color: ${color};
+        border: 2px solid white;
+        border-radius: 50%;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+      "></div>`,
+      iconSize: [size, size],
+      iconAnchor: [size/2, size/2],
+    })
+  }
+  return iconCache[key]
+}
 
 const solarLivreIcon = createCustomIcon('#22c55e')
 const solarCativoIcon = createCustomIcon('#84cc16')
 const normalLivreIcon = createCustomIcon('#3b82f6')
 const normalCativoIcon = createCustomIcon('#6366f1')
+
+// Função para criar ícone do cluster customizado
+const createClusterCustomIcon = (cluster: L.MarkerCluster) => {
+  const count = cluster.getChildCount()
+  let size = 'small'
+  let bgColor = '#3b82f6'
+  
+  if (count > 100) {
+    size = 'large'
+    bgColor = '#ef4444'
+  } else if (count > 50) {
+    size = 'medium'
+    bgColor = '#f97316'
+  }
+  
+  const sizes = { small: 30, medium: 40, large: 50 }
+  const dimension = sizes[size as keyof typeof sizes]
+  
+  return L.divIcon({
+    html: `<div style="
+      background-color: ${bgColor};
+      width: ${dimension}px;
+      height: ${dimension}px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: ${dimension / 3}px;
+      border: 3px solid white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    ">${count}</div>`,
+    className: 'custom-cluster-icon',
+    iconSize: L.point(dimension, dimension, true),
+  })
+}
 
 // Componente para controlar o mapa
 function MapController({ center, zoom }: { center: [number, number]; zoom: number }) {
@@ -141,6 +183,103 @@ const getStreetViewDirectUrl = (lat: number, lng: number) => {
   // Abre o Street View buscando cobertura próxima ao ponto
   return `https://www.google.com/maps/@${lat},${lng},3a,75y,0h,90t/data=!3m4!1e1!3m2!1s!2e0`
 }
+
+// Função para obter ícone baseado no tipo do ponto
+const getMarkerIcon = (ponto: PontoMapaCompleto) => {
+  const isSolar = ponto.possui_solar
+  const isLivre = ponto.tipo_consumidor === 'livre'
+  if (isSolar && isLivre) return solarLivreIcon
+  if (isSolar && !isLivre) return solarCativoIcon
+  if (!isSolar && isLivre) return normalLivreIcon
+  return normalCativoIcon
+}
+
+// Componente Marker memoizado para performance
+const MemoizedMarker = memo(({ ponto }: { ponto: PontoMapaCompleto }) => {
+  const icon = getMarkerIcon(ponto)
+  
+  return (
+    <Marker
+      position={[ponto.latitude, ponto.longitude]}
+      icon={icon}
+    >
+      <Tooltip 
+        direction="top" 
+        offset={[0, -6]} 
+        opacity={0.95}
+        className="custom-tooltip"
+      >
+        <div className="min-w-[200px] max-w-[260px]">
+          <h3 className="font-bold text-sm text-blue-800 mb-1 flex items-center gap-1">
+            📍 {ponto.titulo || ponto.cod_id}
+            {ponto.possui_solar && <span className="text-yellow-500">☀️</span>}
+          </h3>
+          
+          {/* Badges */}
+          <div className="flex gap-1 mb-2">
+            <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
+              ponto.tipo_consumidor === 'livre' 
+                ? 'bg-green-100 text-green-700' 
+                : 'bg-gray-100 text-gray-700'
+            }`}>
+              {ponto.tipo_consumidor === 'livre' ? '🔓 LIVRE' : '🔒 CATIVO'}
+            </span>
+            <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
+              ponto.possui_solar
+                ? 'bg-yellow-100 text-yellow-700' 
+                : 'bg-gray-100 text-gray-600'
+            }`}>
+              {ponto.possui_solar ? '☀️ SOLAR' : 'SEM SOLAR'}
+            </span>
+          </div>
+          
+          {/* Dados compactos */}
+          <div className="space-y-0.5 text-xs border-t pt-1">
+            <div className="flex justify-between">
+              <span className="text-gray-600">Demanda:</span>
+              <span className="font-bold text-green-700">
+                {ponto.demanda?.toLocaleString('pt-BR', {maximumFractionDigits: 0})} kW
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">Consumo:</span>
+              <span className="font-bold text-blue-700">
+                {ponto.consumo_medio?.toLocaleString('pt-BR', {maximumFractionDigits: 0})} kWh
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">Município:</span>
+              <span className="font-medium">{ponto.municipio || '-'}</span>
+            </div>
+          </div>
+          
+          {/* Links */}
+          <div className="mt-2 pt-1 border-t flex gap-1 text-xs">
+            <a
+              href={getStreetViewUrl(ponto.latitude, ponto.longitude)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 text-center px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              📍 Maps
+            </a>
+            <a
+              href={getStreetViewDirectUrl(ponto.latitude, ponto.longitude)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 text-center px-2 py-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              🚶 Street
+            </a>
+          </div>
+        </div>
+      </Tooltip>
+    </Marker>
+  )
+}, (prevProps, nextProps) => prevProps.ponto.id === nextProps.ponto.id)
+MemoizedMarker.displayName = 'MemoizedMarker'
 
 export default function MapaPage() {
   // Estados dos filtros
@@ -586,101 +725,19 @@ export default function MapaPage() {
               />
             )}
             
-            {/* Marcadores */}
-            {mapaData.pontos.map((ponto) => {
-              const isSolar = ponto.possui_solar
-              const isLivre = ponto.tipo_consumidor === 'livre'
-              let icon = normalCativoIcon
-              if (isSolar && isLivre) icon = solarLivreIcon
-              else if (isSolar && !isLivre) icon = solarCativoIcon
-              else if (!isSolar && isLivre) icon = normalLivreIcon
-              
-              return (
-                <Marker
-                  key={ponto.id}
-                  position={[ponto.latitude, ponto.longitude]}
-                  icon={icon}
-                >
-                  <Tooltip 
-                    direction="top" 
-                    offset={[0, -8]} 
-                    opacity={0.95}
-                    className="custom-tooltip"
-                  >
-                    <div className="min-w-[220px] max-w-[280px]">
-                      <h3 className="font-bold text-sm text-blue-800 mb-1 flex items-center gap-1">
-                        📍 {ponto.titulo || ponto.cod_id}
-                        {ponto.possui_solar && <span className="text-yellow-500">☀️</span>}
-                      </h3>
-                      
-                      {/* Badges */}
-                      <div className="flex gap-1 mb-2">
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-                          ponto.tipo_consumidor === 'livre' 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-gray-100 text-gray-700'
-                        }`}>
-                          {ponto.tipo_consumidor === 'livre' ? '🔓 LIVRE' : '🔒 CATIVO'}
-                        </span>
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-                          ponto.possui_solar
-                            ? 'bg-yellow-100 text-yellow-700' 
-                            : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {ponto.possui_solar ? '☀️ SOLAR' : 'SEM SOLAR'}
-                        </span>
-                      </div>
-                      
-                      {/* Dados compactos */}
-                      <div className="space-y-1 text-xs border-t pt-1">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Demanda:</span>
-                          <span className="font-bold text-green-700">
-                            {ponto.demanda?.toLocaleString('pt-BR', {maximumFractionDigits: 0})} kW
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Consumo:</span>
-                          <span className="font-bold text-blue-700">
-                            {ponto.consumo_medio?.toLocaleString('pt-BR', {maximumFractionDigits: 0})} kWh
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Classe:</span>
-                          <span className="font-medium">{ponto.classe || '-'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Município:</span>
-                          <span className="font-medium">{ponto.municipio || '-'}</span>
-                        </div>
-                      </div>
-                      
-                      {/* Links */}
-                      <div className="mt-2 pt-1 border-t flex gap-1 text-xs">
-                        <a
-                          href={getStreetViewUrl(ponto.latitude, ponto.longitude)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 text-center px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded transition-colors"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          📍 Ver no Maps
-                        </a>
-                        <a
-                          href={getStreetViewDirectUrl(ponto.latitude, ponto.longitude)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 text-center px-2 py-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded transition-colors"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          🚶 Street View
-                        </a>
-                      </div>
-                    </div>
-                  </Tooltip>
-                </Marker>
-              )
-            })}
+            {/* Marcadores com Cluster para performance */}
+            <MarkerClusterGroup
+              chunkedLoading
+              iconCreateFunction={createClusterCustomIcon}
+              maxClusterRadius={60}
+              spiderfyOnMaxZoom={true}
+              showCoverageOnHover={false}
+              disableClusteringAtZoom={16}
+            >
+              {mapaData.pontos.map((ponto) => (
+                <MemoizedMarker key={ponto.id} ponto={ponto} />
+              ))}
+            </MarkerClusterGroup>
           </MapContainer>
         ) : (
           <div className="h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
