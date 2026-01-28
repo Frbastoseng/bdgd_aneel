@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
+import { useThemeStore } from '@/stores/themeStore'
 import {
   Bars3Icon,
   XMarkIcon,
@@ -14,6 +15,8 @@ import {
   ClipboardDocumentListIcon,
   BellIcon,
   ArrowRightOnRectangleIcon,
+  SunIcon,
+  MoonIcon,
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 
@@ -33,6 +36,7 @@ const adminNavigation = [
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { user, logout } = useAuthStore()
+  const { theme, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
   
   const handleLogout = async () => {
@@ -43,7 +47,7 @@ export default function MainLayout() {
   const isAdmin = user?.role === 'admin'
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 transition-colors duration-300">
       {/* Sidebar mobile overlay */}
       {sidebarOpen && (
         <div
@@ -55,16 +59,16 @@ export default function MainLayout() {
       {/* Sidebar mobile */}
       <div
         className={clsx(
-          'fixed inset-y-0 left-0 z-50 w-72 bg-white shadow-2xl transition-transform duration-300 lg:hidden',
+          'fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-gray-800 shadow-2xl transition-transform duration-300 lg:hidden',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-100">
+        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-gradient-to-br from-primary-700 to-primary-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-display font-bold text-lg">⚡</span>
             </div>
-            <span className="text-lg font-display font-bold text-gray-900">BDGD</span>
+            <span className="text-lg font-display font-bold text-gray-900 dark:text-white">BDGD</span>
           </div>
           <button 
             onClick={() => setSidebarOpen(false)}
@@ -115,15 +119,15 @@ export default function MainLayout() {
       
       {/* Sidebar desktop */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:w-64 lg:block">
-        <div className="flex flex-col h-full bg-white border-r border-gray-100">
-          <div className="flex items-center h-16 px-6 border-b border-gray-100">
+        <div className="flex flex-col h-full bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700 transition-colors duration-300">
+          <div className="flex items-center h-16 px-6 border-b border-gray-100 dark:border-gray-700">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gradient-to-br from-primary-700 to-primary-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-display font-bold text-lg">⚡</span>
               </div>
               <div>
-                <span className="text-lg font-display font-bold text-gray-900">BDGD</span>
-                <p className="text-xs text-gray-500">ANEEL</p>
+                <span className="text-lg font-display font-bold text-gray-900 dark:text-white">BDGD</span>
+                <p className="text-xs text-gray-500 dark:text-gray-400">ANEEL</p>
               </div>
             </div>
           </div>
@@ -166,16 +170,16 @@ export default function MainLayout() {
           </nav>
           
           {/* User section */}
-          <div className="p-4 border-t border-gray-100 space-y-3">
-            <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-primary-50 to-primary-50/50 rounded-xl">
+          <div className="p-4 border-t border-gray-100 dark:border-gray-700 space-y-3">
+            <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-primary-50 to-primary-50/50 dark:from-gray-700 dark:to-gray-700/50 rounded-xl">
               <div className="w-10 h-10 bg-gradient-to-br from-primary-700 to-primary-600 rounded-lg flex items-center justify-center flex-shrink-0">
                 <UserIcon className="w-5 h-5 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                   {user?.full_name}
                 </p>
-                <p className="text-xs text-gray-500 truncate">
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                   {user?.email}
                 </p>
               </div>
@@ -201,11 +205,11 @@ export default function MainLayout() {
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Header */}
-        <header className="sticky top-0 z-30 h-16 bg-white border-b border-gray-100 backdrop-blur-sm bg-white/80">
+        <header className="sticky top-0 z-30 h-16 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 backdrop-blur-sm bg-white/80 dark:bg-gray-800/80 transition-colors duration-300">
           <div className="flex items-center justify-between h-full px-4 lg:px-8">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="lg:hidden p-2 -ml-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
               <Bars3Icon className="w-6 h-6" />
             </button>
@@ -213,7 +217,20 @@ export default function MainLayout() {
             <div className="flex-1" />
             
             <div className="flex items-center gap-4">
-              <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors relative">
+              {/* Toggle Dark Mode */}
+              <button
+                onClick={toggleTheme}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-yellow-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all duration-300"
+                title={theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}
+              >
+                {theme === 'dark' ? (
+                  <SunIcon className="w-6 h-6 text-yellow-400" />
+                ) : (
+                  <MoonIcon className="w-6 h-6" />
+                )}
+              </button>
+              
+              <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors relative">
                 <BellIcon className="w-6 h-6" />
                 {isAdmin && (
                   <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
