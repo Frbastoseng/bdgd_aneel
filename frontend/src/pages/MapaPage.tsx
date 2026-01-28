@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap, Rectangle, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Tooltip, useMap, Rectangle, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useQuery, useMutation } from '@tanstack/react-query'
