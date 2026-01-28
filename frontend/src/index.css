@@ -293,6 +293,19 @@
   border: none !important;
 }
 
+/* Garantir que marcadores fiquem visíveis em qualquer zoom */
+.leaflet-marker-icon {
+  z-index: 1000 !important;
+}
+
+.leaflet-marker-pane {
+  z-index: 600 !important;
+}
+
+.custom-marker > div {
+  pointer-events: auto !important;
+}
+
 /* Cursor crosshair para seleção de área no mapa */
 .leaflet-container[style*="crosshair"] {
   cursor: crosshair !important;

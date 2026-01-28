@@ -9,7 +9,7 @@ import toast from 'react-hot-toast'
 import { MagnifyingGlassIcon, MapPinIcon } from '@heroicons/react/24/outline'
 
 // Ícones customizados para Leaflet
-const createCustomIcon = (color: string, size = 12) => L.divIcon({
+const createCustomIcon = (color: string, size = 14) => L.divIcon({
   className: 'custom-marker',
   html: `<div style="
     width: ${size}px;
@@ -17,7 +17,9 @@ const createCustomIcon = (color: string, size = 12) => L.divIcon({
     background-color: ${color};
     border: 2px solid white;
     border-radius: 50%;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    min-width: ${size}px;
+    min-height: ${size}px;
   "></div>`,
   iconSize: [size, size],
   iconAnchor: [size/2, size/2],
