@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 import io
+import pandas as pd
 
 from app.core.database import get_db
 from app.models.user import User
@@ -18,7 +19,12 @@ from app.schemas.aneel import (
     LocalidadesResponse,
     ClienteANEEL,
     PontoMapa,
-    CLAS_SUB_MAP
+    CLAS_SUB_MAP,
+    PontoMapaCompleto,
+    MapaAvancadoResponse,
+    ExportarSelecaoRequest,
+    SavedQueryCreate,
+    SavedQueryUpdate
 )
 from app.services.aneel_service import ANEELService, TarifasService
 from app.api.deps import get_current_active_user, get_current_admin
@@ -346,6 +352,399 @@ async def status_localidades(
         result["error"] = str(e)
     
     return result
+
+
+# ============ Endpoints de Mapa Avançado ============
+
+@router.get("/mapa/pontos")
+async def obter_pontos_mapa_avancado(
+    uf: Optional[str] = Query(None, description="Filtrar por UF"),
+    municipio: Optional[str] = Query(None, description="Filtrar por código do município"),
+    possui_solar: Optional[bool] = None,
+    tipo_consumidor: Optional[str] = Query(None, description="Livre ou Cativo"),
+    demanda_min: Optional[float] = None,
+    demanda_max: Optional[float] = None,
+    classe: Optional[str] = Query(None, description="Classe do cliente"),
+    limit: int = Query(5000, le=20000),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Retorna pontos para o mapa avançado com informações completas para tooltip.
+    Otimizado para grandes volumes de dados.
+    """
+    from app.schemas.aneel import PontoMapaCompleto, MapaAvancadoResponse, CLAS_SUB_MAP
+    
+    df = ANEELService.carregar_dados()
+    
+    if df.empty:
+        return MapaAvancadoResponse(
+            pontos=[],
+            total=0,
+            centro={"lat": -15.7801, "lng": -47.9292},
+            zoom=4
+        )
+    
+    # Aplicar filtros
+    if uf:
+        df = df[df["Nome_UF"] == uf] if "Nome_UF" in df.columns else df
+    
+    if municipio:
+        df = df[df["MUN"] == municipio] if "MUN" in df.columns else df
+    
+    if possui_solar is not None:
+        df = df[df["POSSUI_SOLAR"] == possui_solar] if "POSSUI_SOLAR" in df.columns else df
+    
+    if tipo_consumidor:
+        if tipo_consumidor.lower() == "livre":
+            df = df[df["LIV"] == 1] if "LIV" in df.columns else df
+        elif tipo_consumidor.lower() == "cativo":
+            df = df[df["LIV"] == 0] if "LIV" in df.columns else df
+    
+    if demanda_min is not None and "DEM_CONT" in df.columns:
+        df = df[df["DEM_CONT"] >= demanda_min]
+    
+    if demanda_max is not None and "DEM_CONT" in df.columns:
+        df = df[df["DEM_CONT"] <= demanda_max]
+    
+    if classe and "CLAS_SUB" in df.columns:
+        df = df[df["CLAS_SUB"] == classe]
+    
+    total = len(df)
+    
+    # Limitar resultados
+    df = df.head(limit)
+    
+    # Converter para pontos
+    pontos = []
+    for idx, row in df.iterrows():
+        try:
+            lat = float(row.get("POINT_Y", 0))
+            lng = float(row.get("POINT_X", 0))
+            
+            if lat == 0 or lng == 0:
+                continue
+            
+            # Calcular consumo médio
+            ene_cols = [f"ENE_{str(i).zfill(2)}" for i in range(1, 13)]
+            consumos = [float(row.get(c, 0) or 0) for c in ene_cols if c in row]
+            consumo_medio = sum(consumos) / len(consumos) if consumos else 0
+            
+            ponto = PontoMapaCompleto(
+                id=str(row.get("COD_ID", idx)),
+                latitude=lat,
+                longitude=lng,
+                cod_id=str(row.get("COD_ID", "")),
+                titulo=str(row.get("Nome_Município", "") or row.get("COD_ID", "")),
+                tipo_consumidor="livre" if row.get("LIV") == 1 else "cativo",
+                classe=CLAS_SUB_MAP.get(str(row.get("CLAS_SUB", "")), str(row.get("CLAS_SUB", ""))),
+                grupo_tarifario=str(row.get("GRU_TAR", "")),
+                municipio=str(row.get("Nome_Município", "")),
+                uf=str(row.get("Nome_UF", "")),
+                demanda=float(row.get("DEM_CONT", 0) or 0),
+                demanda_contratada=float(row.get("DEM_CONT", 0) or 0),
+                consumo_medio=round(consumo_medio, 2),
+                consumo_max=float(row.get("ENE_MAX", 0) or 0),
+                carga_instalada=float(row.get("CAR_INST", 0) or 0),
+                possui_solar=bool(row.get("POSSUI_SOLAR", False))
+            )
+            pontos.append(ponto)
+        except Exception:
+            continue
+    
+    # Calcular centro
+    if pontos:
+        lats = [p.latitude for p in pontos]
+        lngs = [p.longitude for p in pontos]
+        centro = {
+            "lat": sum(lats) / len(lats),
+            "lng": sum(lngs) / len(lngs)
+        }
+    else:
+        centro = {"lat": -15.7801, "lng": -47.9292}
+    
+    # Estatísticas rápidas
+    demandas = [p.demanda or 0 for p in pontos if p.demanda]
+    estatisticas = {
+        "total_pontos": len(pontos),
+        "total_base": total,
+        "com_solar": sum(1 for p in pontos if p.possui_solar),
+        "livres": sum(1 for p in pontos if p.tipo_consumidor == "livre"),
+        "cativos": sum(1 for p in pontos if p.tipo_consumidor == "cativo"),
+        "demanda_media": round(sum(demandas) / len(demandas), 2) if demandas else 0,
+    }
+    
+    return MapaAvancadoResponse(
+        pontos=pontos,
+        total=total,
+        centro=centro,
+        zoom=10 if len(pontos) < 500 else 8,
+        estatisticas=estatisticas
+    )
+
+
+@router.post("/mapa/exportar-selecao")
+async def exportar_selecao_mapa(
+    request: "ExportarSelecaoRequest",
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Exporta dados de pontos dentro de uma área selecionada no mapa.
+    Retorna arquivo XLSX ou CSV.
+    """
+    from app.schemas.aneel import ExportarSelecaoRequest, CLAS_SUB_MAP
+    
+    df = ANEELService.carregar_dados()
+    
+    if df.empty:
+        raise HTTPException(status_code=404, detail="Nenhum dado disponível")
+    
+    # Filtrar por bounds (área selecionada)
+    bounds = request.bounds
+    north = bounds.get("north", 90)
+    south = bounds.get("south", -90)
+    east = bounds.get("east", 180)
+    west = bounds.get("west", -180)
+    
+    # POINT_Y = latitude, POINT_X = longitude
+    df["POINT_Y"] = pd.to_numeric(df["POINT_Y"], errors="coerce")
+    df["POINT_X"] = pd.to_numeric(df["POINT_X"], errors="coerce")
+    
+    df_area = df[
+        (df["POINT_Y"] >= south) & 
+        (df["POINT_Y"] <= north) &
+        (df["POINT_X"] >= west) & 
+        (df["POINT_X"] <= east)
+    ]
+    
+    # Aplicar filtros adicionais se fornecidos
+    filtros = request.filtros or {}
+    
+    if filtros.get("possui_solar") is not None:
+        df_area = df_area[df_area["POSSUI_SOLAR"] == filtros["possui_solar"]]
+    
+    if filtros.get("tipo_consumidor"):
+        if filtros["tipo_consumidor"].lower() == "livre":
+            df_area = df_area[df_area["LIV"] == 1]
+        elif filtros["tipo_consumidor"].lower() == "cativo":
+            df_area = df_area[df_area["LIV"] == 0]
+    
+    if df_area.empty:
+        raise HTTPException(status_code=404, detail="Nenhum ponto encontrado na área selecionada")
+    
+    # Preparar dados para exportação
+    colunas_export = [
+        "COD_ID", "Nome_UF", "Nome_Município", "CLAS_SUB", "GRU_TAR", "LIV",
+        "DEM_CONT", "CAR_INST", "ENE_MAX", "CEG_GD", "POINT_X", "POINT_Y"
+    ]
+    colunas_disponiveis = [c for c in colunas_export if c in df_area.columns]
+    df_export = df_area[colunas_disponiveis].copy()
+    
+    # Renomear colunas para português
+    renome = {
+        "COD_ID": "Código",
+        "Nome_UF": "Estado",
+        "Nome_Município": "Município",
+        "CLAS_SUB": "Classe",
+        "GRU_TAR": "Grupo Tarifário",
+        "LIV": "Livre",
+        "DEM_CONT": "Demanda Contratada",
+        "CAR_INST": "Carga Instalada",
+        "ENE_MAX": "Energia Máxima",
+        "CEG_GD": "Geração Distribuída",
+        "POINT_X": "Longitude",
+        "POINT_Y": "Latitude"
+    }
+    df_export = df_export.rename(columns=renome)
+    
+    # Converter coluna Livre
+    if "Livre" in df_export.columns:
+        df_export["Livre"] = df_export["Livre"].map({1: "Sim", 0: "Não"})
+    
+    # Exportar
+    if request.formato == "csv":
+        csv_bytes = df_export.to_csv(index=False).encode("utf-8")
+        return StreamingResponse(
+            io.BytesIO(csv_bytes),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=selecao_mapa_{len(df_export)}_pontos.csv"}
+        )
+    else:
+        xlsx_buffer = io.BytesIO()
+        df_export.to_excel(xlsx_buffer, index=False, engine="openpyxl")
+        xlsx_buffer.seek(0)
+        return StreamingResponse(
+            xlsx_buffer,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=selecao_mapa_{len(df_export)}_pontos.xlsx"}
+        )
+
+
+# ============ Endpoints de Consultas Salvas ============
+
+@router.get("/consultas-salvas")
+async def listar_consultas_salvas(
+    query_type: Optional[str] = Query(None, description="Filtrar por tipo: consulta, mapa, tarifas"),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Lista todas as consultas salvas do usuário"""
+    from sqlalchemy import select
+    from app.models.user import SavedQuery
+    import json
+    
+    query = select(SavedQuery).where(SavedQuery.user_id == current_user.id)
+    
+    if query_type:
+        query = query.where(SavedQuery.query_type == query_type)
+    
+    query = query.order_by(SavedQuery.last_used_at.desc().nullsfirst(), SavedQuery.created_at.desc())
+    
+    result = await db.execute(query)
+    saved_queries = result.scalars().all()
+    
+    return [
+        {
+            "id": sq.id,
+            "name": sq.name,
+            "description": sq.description,
+            "filters": json.loads(sq.filters) if sq.filters else {},
+            "query_type": sq.query_type,
+            "created_at": sq.created_at.isoformat() if sq.created_at else None,
+            "updated_at": sq.updated_at.isoformat() if sq.updated_at else None,
+            "last_used_at": sq.last_used_at.isoformat() if sq.last_used_at else None,
+            "use_count": sq.use_count or 0
+        }
+        for sq in saved_queries
+    ]
+
+
+@router.post("/consultas-salvas")
+async def criar_consulta_salva(
+    data: "SavedQueryCreate",
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Salva uma nova consulta"""
+    from app.models.user import SavedQuery
+    from app.schemas.aneel import SavedQueryCreate
+    import json
+    
+    nova_consulta = SavedQuery(
+        user_id=current_user.id,
+        name=data.name,
+        description=data.description,
+        filters=json.dumps(data.filters),
+        query_type=data.query_type
+    )
+    
+    db.add(nova_consulta)
+    await db.commit()
+    await db.refresh(nova_consulta)
+    
+    return {
+        "id": nova_consulta.id,
+        "name": nova_consulta.name,
+        "message": "Consulta salva com sucesso!"
+    }
+
+
+@router.put("/consultas-salvas/{query_id}")
+async def atualizar_consulta_salva(
+    query_id: int,
+    data: "SavedQueryUpdate",
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Atualiza uma consulta salva"""
+    from sqlalchemy import select
+    from app.models.user import SavedQuery
+    from app.schemas.aneel import SavedQueryUpdate
+    import json
+    
+    result = await db.execute(
+        select(SavedQuery).where(
+            SavedQuery.id == query_id,
+            SavedQuery.user_id == current_user.id
+        )
+    )
+    consulta = result.scalar_one_or_none()
+    
+    if not consulta:
+        raise HTTPException(status_code=404, detail="Consulta não encontrada")
+    
+    if data.name:
+        consulta.name = data.name
+    if data.description is not None:
+        consulta.description = data.description
+    if data.filters:
+        consulta.filters = json.dumps(data.filters)
+    
+    await db.commit()
+    
+    return {"message": "Consulta atualizada com sucesso!"}
+
+
+@router.delete("/consultas-salvas/{query_id}")
+async def excluir_consulta_salva(
+    query_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Exclui uma consulta salva"""
+    from sqlalchemy import select, delete
+    from app.models.user import SavedQuery
+    
+    result = await db.execute(
+        select(SavedQuery).where(
+            SavedQuery.id == query_id,
+            SavedQuery.user_id == current_user.id
+        )
+    )
+    consulta = result.scalar_one_or_none()
+    
+    if not consulta:
+        raise HTTPException(status_code=404, detail="Consulta não encontrada")
+    
+    await db.delete(consulta)
+    await db.commit()
+    
+    return {"message": "Consulta excluída com sucesso!"}
+
+
+@router.post("/consultas-salvas/{query_id}/usar")
+async def usar_consulta_salva(
+    query_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Registra uso de uma consulta salva e retorna os filtros"""
+    from sqlalchemy import select
+    from app.models.user import SavedQuery
+    from datetime import datetime
+    import json
+    
+    result = await db.execute(
+        select(SavedQuery).where(
+            SavedQuery.id == query_id,
+            SavedQuery.user_id == current_user.id
+        )
+    )
+    consulta = result.scalar_one_or_none()
+    
+    if not consulta:
+        raise HTTPException(status_code=404, detail="Consulta não encontrada")
+    
+    # Atualizar uso
+    consulta.use_count = (consulta.use_count or 0) + 1
+    consulta.last_used_at = datetime.utcnow()
+    await db.commit()
+    
+    return {
+        "id": consulta.id,
+        "name": consulta.name,
+        "filters": json.loads(consulta.filters) if consulta.filters else {},
+        "query_type": consulta.query_type
+    }
 
 
 # ============ Endpoints de Tarifas ============

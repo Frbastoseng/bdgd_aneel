@@ -123,3 +123,35 @@ class AuditLog(Base):
     
     def __repr__(self):
         return f"<AuditLog {self.action} by {self.user_id}>"
+
+
+class SavedQuery(Base):
+    """Consultas salvas pelo usuário"""
+    __tablename__ = "saved_queries"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    # Nome e descrição da consulta
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    
+    # Filtros salvos em JSON
+    filters = Column(Text, nullable=False)  # JSON string com todos os filtros
+    
+    # Tipo de consulta (consulta, mapa, tarifas)
+    query_type = Column(String(50), default="consulta")
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Contador de uso
+    use_count = Column(Integer, default=0)
+    
+    # Relacionamento
+    user = relationship("User")
+    
+    def __repr__(self):
+        return f"<SavedQuery {self.name} by {self.user_id}>"

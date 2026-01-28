@@ -157,6 +157,24 @@ export const aneelApi = {
     return response.data
   },
   
+  // Mapa avançado com pontos completos
+  mapaAvancado: async (params: Record<string, unknown>) => {
+    const response = await api.get('/aneel/mapa/pontos', { params })
+    return response.data
+  },
+  
+  // Exportar seleção do mapa
+  exportarSelecaoMapa: async (data: {
+    bounds: { north: number; south: number; east: number; west: number };
+    filtros?: Record<string, unknown>;
+    formato?: 'xlsx' | 'csv';
+  }) => {
+    const response = await api.post('/aneel/mapa/exportar-selecao', data, {
+      responseType: 'blob',
+    })
+    return response.data
+  },
+  
   opcoesFiltros: async () => {
     const response = await api.get('/aneel/opcoes-filtros')
     return response.data
@@ -195,6 +213,42 @@ export const aneelApi = {
   
   statusDados: async () => {
     const response = await api.get('/aneel/status-dados')
+    return response.data
+  },
+  
+  // Consultas Salvas
+  listarConsultasSalvas: async (queryType?: string) => {
+    const params = queryType ? { query_type: queryType } : {}
+    const response = await api.get('/aneel/consultas-salvas', { params })
+    return response.data
+  },
+  
+  salvarConsulta: async (data: {
+    name: string;
+    description?: string;
+    filters: Record<string, unknown>;
+    query_type?: string;
+  }) => {
+    const response = await api.post('/aneel/consultas-salvas', data)
+    return response.data
+  },
+  
+  atualizarConsultaSalva: async (id: number, data: {
+    name?: string;
+    description?: string;
+    filters?: Record<string, unknown>;
+  }) => {
+    const response = await api.put(`/aneel/consultas-salvas/${id}`, data)
+    return response.data
+  },
+  
+  excluirConsultaSalva: async (id: number) => {
+    const response = await api.delete(`/aneel/consultas-salvas/${id}`)
+    return response.data
+  },
+  
+  usarConsultaSalva: async (id: number) => {
+    const response = await api.post(`/aneel/consultas-salvas/${id}/usar`)
     return response.data
   },
   

@@ -226,6 +226,89 @@ class EstatisticasPorClasse(BaseModel):
     energia_media: float
 
 
+# ============ Schemas para Mapa Avançado ============
+
+class AreaSelecao(BaseModel):
+    """Área de seleção para exportação de pontos"""
+    bounds: Dict[str, float] = Field(..., description="Limites da área: north, south, east, west")
+    
+class PontoMapaCompleto(BaseModel):
+    """Ponto no mapa com informações completas para tooltip"""
+    id: str
+    latitude: float
+    longitude: float
+    cod_id: Optional[str] = None
+    titulo: Optional[str] = None
+    
+    # Informações básicas
+    tipo_consumidor: str  # "livre" ou "cativo"
+    classe: Optional[str] = None
+    grupo_tarifario: Optional[str] = None
+    
+    # Localização
+    municipio: Optional[str] = None
+    uf: Optional[str] = None
+    
+    # Dados de consumo
+    demanda: Optional[float] = None  # Alias para frontend
+    demanda_contratada: Optional[float] = None
+    consumo_medio: Optional[float] = None
+    consumo_max: Optional[float] = None
+    carga_instalada: Optional[float] = None
+    
+    # Solar
+    possui_solar: bool = False
+    
+    # Para clustering
+    cluster_id: Optional[int] = None
+
+
+class MapaAvancadoResponse(BaseModel):
+    """Resposta do mapa avançado com pontos completos"""
+    pontos: List[PontoMapaCompleto]
+    total: int
+    centro: Dict[str, float]
+    zoom: int
+    estatisticas: Optional[Dict[str, Any]] = None
+
+
+class ExportarSelecaoRequest(BaseModel):
+    """Request para exportar dados de uma seleção"""
+    bounds: Dict[str, float] = Field(..., description="north, south, east, west")
+    filtros: Optional[Dict[str, Any]] = None
+    formato: str = Field("xlsx", description="xlsx ou csv")
+
+
+# ============ Schemas para Consultas Salvas ============
+
+class SavedQueryCreate(BaseModel):
+    """Criar consulta salva"""
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    filters: Dict[str, Any]
+    query_type: str = Field("consulta", description="consulta, mapa, tarifas")
+
+
+class SavedQueryUpdate(BaseModel):
+    """Atualizar consulta salva"""
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    filters: Optional[Dict[str, Any]] = None
+
+
+class SavedQueryResponse(BaseModel):
+    """Resposta de consulta salva"""
+    id: int
+    name: str
+    description: Optional[str] = None
+    filters: Dict[str, Any]
+    query_type: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    last_used_at: Optional[datetime] = None
+    use_count: int = 0
+
+
 # ============ Mapeamentos ============
 
 CLAS_SUB_MAP = {

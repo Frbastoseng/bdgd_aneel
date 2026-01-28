@@ -167,3 +167,66 @@ export interface OpcoesFiltrosTarifas {
   modalidades: string[]
   detalhes: string[]
 }
+
+// Tipos para Mapa Avançado
+export interface PontoMapaCompleto {
+  id: string
+  latitude: number
+  longitude: number
+  cod_id?: string
+  titulo?: string
+  tipo_consumidor: string  // "livre" ou "cativo"
+  classe?: string
+  grupo_tarifario?: string
+  municipio?: string
+  uf?: string
+  demanda?: number
+  demanda_contratada?: number
+  consumo_medio?: number
+  consumo_max?: number
+  carga_instalada?: number
+  possui_solar: boolean
+  cluster_id?: number
+}
+
+export interface MapaAvancadoResponse {
+  pontos: PontoMapaCompleto[]
+  total: number
+  centro: { lat: number; lng: number }
+  zoom: number
+  estatisticas?: {
+    total_pontos: number
+    total_base: number
+    com_solar: number
+    livres: number
+    cativos: number
+    demanda_media?: number
+  }
+}
+
+export interface AreaSelecao {
+  north: number
+  south: number
+  east: number
+  west: number
+}
+
+// Tipos para Consultas Salvas
+export interface ConsultaSalva {
+  id: number
+  name: string
+  description?: string
+  filters: Record<string, unknown>
+  query_type: 'consulta' | 'mapa' | 'tarifas'
+  created_at: string
+  updated_at?: string
+  last_used_at?: string
+  use_count: number
+}
+
+export interface CriarConsultaSalva {
+  name: string
+  description?: string
+  filters: Record<string, unknown>
+  query_type?: 'consulta' | 'mapa' | 'tarifas'
+}
