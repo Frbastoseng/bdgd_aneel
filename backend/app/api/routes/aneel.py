@@ -359,7 +359,7 @@ async def status_localidades(
 @router.get("/mapa/pontos")
 async def obter_pontos_mapa_avancado(
     uf: Optional[str] = Query(None, description="Filtrar por UF"),
-    municipio: Optional[str] = Query(None, description="Filtrar por código do município"),
+    municipio: Optional[str] = Query(None, description="Filtrar por nome do município"),
     possui_solar: Optional[bool] = None,
     tipo_consumidor: Optional[str] = Query(None, description="Livre ou Cativo"),
     demanda_min: Optional[float] = None,
@@ -374,7 +374,8 @@ async def obter_pontos_mapa_avancado(
     """
     from app.schemas.aneel import PontoMapaCompleto, MapaAvancadoResponse, CLAS_SUB_MAP
     
-    df = ANEELService.carregar_dados()
+    # Usar dados processados com enriquecimento de localidades
+    df = ANEELService.carregar_dados_processados()
     
     if df.empty:
         return MapaAvancadoResponse(
@@ -389,7 +390,11 @@ async def obter_pontos_mapa_avancado(
         df = df[df["Nome_UF"] == uf] if "Nome_UF" in df.columns else df
     
     if municipio:
-        df = df[df["MUN"] == municipio] if "MUN" in df.columns else df
+        # Filtrar por nome do município (Nome_Município) que vem do enriquecimento
+        if "Nome_Município" in df.columns:
+            df = df[df["Nome_Município"] == municipio]
+        elif "MUN" in df.columns:
+            df = df[df["MUN"] == municipio]
     
     if possui_solar is not None:
         df = df[df["POSSUI_SOLAR"] == possui_solar] if "POSSUI_SOLAR" in df.columns else df
@@ -493,7 +498,8 @@ async def exportar_selecao_mapa(
     """
     from app.schemas.aneel import ExportarSelecaoRequest, CLAS_SUB_MAP
     
-    df = ANEELService.carregar_dados()
+    # Usar dados processados com enriquecimento
+    df = ANEELService.carregar_dados_processados()
     
     if df.empty:
         raise HTTPException(status_code=404, detail="Nenhum dado disponível")
@@ -505,10 +511,7 @@ async def exportar_selecao_mapa(
     east = bounds.get("east", 180)
     west = bounds.get("west", -180)
     
-    # POINT_Y = latitude, POINT_X = longitude
-    df["POINT_Y"] = pd.to_numeric(df["POINT_Y"], errors="coerce")
-    df["POINT_X"] = pd.to_numeric(df["POINT_X"], errors="coerce")
-    
+    # POINT_Y = latitude, POINT_X = longitude (já convertidos em dados processados)
     df_area = df[
         (df["POINT_Y"] >= south) & 
         (df["POINT_Y"] <= north) &

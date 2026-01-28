@@ -127,8 +127,16 @@ function AreaSelector({
   )
 }
 
+// Gera URL do Google Maps que busca a visualização Street View mais próxima
+// Se não tiver Street View exato, mostra o mapa satélite
 const getStreetViewUrl = (lat: number, lng: number) => {
-  return `https://www.google.com/maps/@${lat},${lng},3a,75y,90t/data=!3m6!1e1!3m4!1s!2e0!7i16384!8i8192?entry=ttu`
+  // Usando o link layer=c que tenta Street View, e se não achar mostra satélite
+  return `https://www.google.com/maps/@${lat},${lng},18z/data=!3m1!1e3`
+}
+
+// Gera URL alternativa que abre diretamente no modo Street View (busca panorama próxima)
+const getStreetViewDirectUrl = (lat: number, lng: number) => {
+  return `https://www.google.com/maps?q=&layer=c&cbll=${lat},${lng}&cbp=11,0,0,0,0`
 }
 
 export default function MapaPage() {
@@ -629,14 +637,24 @@ export default function MapaPage() {
                       <div className="mt-3 pt-2 border-t text-xs text-gray-500 text-center">
                         📌 {ponto.latitude.toFixed(6)}, {ponto.longitude.toFixed(6)}
                       </div>
-                      <a
-                        href={getStreetViewUrl(ponto.latitude, ponto.longitude)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-3 block w-full text-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
-                      >
-                        🚶 Abrir Street View
-                      </a>
+                      <div className="mt-3 flex gap-2">
+                        <a
+                          href={getStreetViewDirectUrl(ponto.latitude, ponto.longitude)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 text-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors text-sm"
+                        >
+                          🚶 Street View
+                        </a>
+                        <a
+                          href={getStreetViewUrl(ponto.latitude, ponto.longitude)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 text-center px-3 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors text-sm"
+                        >
+                          🛰️ Satélite
+                        </a>
+                      </div>
                     </div>
                   </Popup>
                 </Marker>
