@@ -89,14 +89,14 @@ export default function DashboardPage() {
       <div className="animate-slide-up">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div>
-            <h1 className="text-3xl md:text-4xl font-display font-bold text-gray-900">
+            <h1 className="text-3xl md:text-4xl font-display font-bold text-gray-900 dark:text-white">
               Bem-vindo, {user?.full_name?.split(' ')[0]}! 👋
             </h1>
-            <p className="text-gray-600 mt-2 text-lg">
+            <p className="text-gray-600 dark:text-gray-400 mt-2 text-lg">
               Sistema de Consulta de Dados da ANEEL (BDGD)
             </p>
           </div>
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-gray-500 dark:text-gray-400">
             {new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
         </div>
@@ -109,11 +109,11 @@ export default function DashboardPage() {
           <div className="stat-card group">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Total de Usuários</p>
-                <p className="text-3xl font-display font-bold text-gray-900">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Total de Usuários</p>
+                <p className="text-3xl font-display font-bold text-gray-900 dark:text-white">
                   {adminStats.total_users}
                 </p>
-                <p className="text-xs text-gray-500 mt-2">Cadastrados no sistema</p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Cadastrados no sistema</p>
               </div>
               <div className="stat-icon bg-gradient-to-br from-blue-100 to-blue-50 group-hover:scale-110 transition-transform">
                 <UsersIcon className="w-6 h-6 text-blue-600" />
@@ -125,8 +125,8 @@ export default function DashboardPage() {
           <div className="stat-card group">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Solicitações Pendentes</p>
-                <p className="text-3xl font-display font-bold text-gray-900">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Solicitações Pendentes</p>
+                <p className="text-3xl font-display font-bold text-gray-900 dark:text-white">
                   {adminStats.pending_requests}
                 </p>
                 {adminStats.pending_requests > 0 && (
@@ -148,11 +148,11 @@ export default function DashboardPage() {
           <div className="stat-card group">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Usuários Ativos</p>
-                <p className="text-3xl font-display font-bold text-gray-900">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Usuários Ativos</p>
+                <p className="text-3xl font-display font-bold text-gray-900 dark:text-white">
                   {adminStats.active_users}
                 </p>
-                <p className="text-xs text-gray-500 mt-2">Últimos 30 dias</p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Últimos 30 dias</p>
               </div>
               <div className="stat-icon bg-gradient-to-br from-green-100 to-green-50 group-hover:scale-110 transition-transform">
                 <ArrowTrendingUpIcon className="w-6 h-6 text-green-600" />
@@ -164,11 +164,11 @@ export default function DashboardPage() {
           <div className="stat-card group">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Consultas Hoje</p>
-                <p className="text-3xl font-display font-bold text-gray-900">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Consultas Hoje</p>
+                <p className="text-3xl font-display font-bold text-gray-900 dark:text-white">
                   {adminStats.total_queries_today}
                 </p>
-                <p className="text-xs text-gray-500 mt-2">Requisições processadas</p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Requisições processadas</p>
               </div>
               <div className="stat-icon bg-gradient-to-br from-purple-100 to-purple-50 group-hover:scale-110 transition-transform">
                 <ChartBarIcon className="w-6 h-6 text-purple-600" />
@@ -182,7 +182,7 @@ export default function DashboardPage() {
       <div className="card animate-slide-up">
         <div className="card-header">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-display font-bold text-gray-900">
+            <h2 className="text-lg font-display font-bold text-gray-900 dark:text-white">
               Status dos Dados ANEEL
             </h2>
             <div className="flex items-center gap-4">
@@ -246,14 +246,14 @@ export default function DashboardPage() {
 
           {statusDados?.disponivel ? (
             <div className="flex items-start gap-4">
-              <div className="stat-icon bg-gradient-to-br from-green-100 to-green-50">
-                <CheckCircleIcon className="w-6 h-6 text-green-600" />
+              <div className="stat-icon bg-gradient-to-br from-green-100 to-green-50 dark:from-green-900/50 dark:to-green-800/30">
+                <CheckCircleIcon className="w-6 h-6 text-green-600 dark:text-green-400" />
               </div>
               <div className="flex-1">
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-lg font-semibold text-gray-900 dark:text-white">
                   Dados Disponíveis
                 </p>
-                <p className="text-gray-600 mt-1">
+                <p className="text-gray-600 dark:text-gray-400 mt-1">
                   {statusDados.total_registros?.toLocaleString('pt-BR')} registros disponíveis
                   {statusDados.ultima_atualizacao && (
                     <> • Última atualização: {new Date(statusDados.ultima_atualizacao).toLocaleString('pt-BR')}</>
@@ -263,14 +263,14 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="flex items-start gap-4">
-              <div className="stat-icon bg-gradient-to-br from-yellow-100 to-yellow-50">
-                <ExclamationTriangleIcon className="w-6 h-6 text-yellow-600" />
+              <div className="stat-icon bg-gradient-to-br from-yellow-100 to-yellow-50 dark:from-yellow-900/50 dark:to-yellow-800/30">
+                <ExclamationTriangleIcon className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
               </div>
               <div className="flex-1">
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-lg font-semibold text-gray-900 dark:text-white">
                   Dados Não Disponíveis
                 </p>
-                <p className="text-gray-600 mt-1">
+                <p className="text-gray-600 dark:text-gray-400 mt-1">
                   {isAdmin ? 'Clique em "Atualizar Dados" para baixar os dados mais recentes' : 'Aguarde o administrador atualizar os dados'}
                 </p>
               </div>
@@ -281,24 +281,24 @@ export default function DashboardPage() {
       
       {/* Quick Actions */}
       <div className="animate-slide-up">
-        <h2 className="text-2xl font-display font-bold text-gray-900 mb-4">
+        <h2 className="text-2xl font-display font-bold text-gray-900 dark:text-white mb-4">
           Acesso Rápido
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Link to="/consulta" className="card-hover group">
             <div className="p-6">
               <div className="flex items-start justify-between mb-4">
-                <div className="stat-icon bg-gradient-to-br from-primary-100 to-primary-50 group-hover:scale-110 transition-transform">
-                  <BoltIcon className="w-6 h-6 text-primary-700" />
+                <div className="stat-icon bg-gradient-to-br from-primary-100 to-primary-50 dark:from-primary-900/50 dark:to-primary-800/30 group-hover:scale-110 transition-transform">
+                  <BoltIcon className="w-6 h-6 text-primary-700 dark:text-primary-400" />
                 </div>
               </div>
-              <h3 className="font-display font-bold text-gray-900 mb-1">
+              <h3 className="font-display font-bold text-gray-900 dark:text-white mb-1">
                 Consulta BDGD
               </h3>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Pesquisar dados de clientes cativos e livres
               </p>
-              <div className="mt-4 text-primary-600 text-sm font-semibold group-hover:translate-x-1 transition-transform">
+              <div className="mt-4 text-primary-600 dark:text-primary-400 text-sm font-semibold group-hover:translate-x-1 transition-transform">
                 Acessar →
               </div>
             </div>
@@ -307,17 +307,17 @@ export default function DashboardPage() {
           <Link to="/tarifas" className="card-hover group">
             <div className="p-6">
               <div className="flex items-start justify-between mb-4">
-                <div className="stat-icon bg-gradient-to-br from-green-100 to-green-50 group-hover:scale-110 transition-transform">
-                  <SunIcon className="w-6 h-6 text-green-600" />
+                <div className="stat-icon bg-gradient-to-br from-green-100 to-green-50 dark:from-green-900/50 dark:to-green-800/30 group-hover:scale-110 transition-transform">
+                  <SunIcon className="w-6 h-6 text-green-600 dark:text-green-400" />
                 </div>
               </div>
-              <h3 className="font-display font-bold text-gray-900 mb-1">
+              <h3 className="font-display font-bold text-gray-900 dark:text-white mb-1">
                 Tarifas
               </h3>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Consultar tarifas de energia por distribuidora
               </p>
-              <div className="mt-4 text-primary-600 text-sm font-semibold group-hover:translate-x-1 transition-transform">
+              <div className="mt-4 text-primary-600 dark:text-primary-400 text-sm font-semibold group-hover:translate-x-1 transition-transform">
                 Acessar →
               </div>
             </div>
@@ -326,17 +326,17 @@ export default function DashboardPage() {
           <Link to="/mapa" className="card-hover group">
             <div className="p-6">
               <div className="flex items-start justify-between mb-4">
-                <div className="stat-icon bg-gradient-to-br from-purple-100 to-purple-50 group-hover:scale-110 transition-transform">
-                  <MapPinIcon className="w-6 h-6 text-purple-600" />
+                <div className="stat-icon bg-gradient-to-br from-purple-100 to-purple-50 dark:from-purple-900/50 dark:to-purple-800/30 group-hover:scale-110 transition-transform">
+                  <MapPinIcon className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                 </div>
               </div>
-              <h3 className="font-display font-bold text-gray-900 mb-1">
+              <h3 className="font-display font-bold text-gray-900 dark:text-white mb-1">
                 Mapa
               </h3>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Visualizar localização com Street View
               </p>
-              <div className="mt-4 text-primary-600 text-sm font-semibold group-hover:translate-x-1 transition-transform">
+              <div className="mt-4 text-primary-600 dark:text-primary-400 text-sm font-semibold group-hover:translate-x-1 transition-transform">
                 Acessar →
               </div>
             </div>
