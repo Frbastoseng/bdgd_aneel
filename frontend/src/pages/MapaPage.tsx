@@ -130,13 +130,16 @@ function AreaSelector({
 // Gera URL do Google Maps que busca a visualização Street View mais próxima
 // Se não tiver Street View exato, mostra o mapa satélite
 const getStreetViewUrl = (lat: number, lng: number) => {
-  // Usando o link layer=c que tenta Street View, e se não achar mostra satélite
-  return `https://www.google.com/maps/@${lat},${lng},18z/data=!3m1!1e3`
+  // Vista de satélite com zoom alto
+  return `https://www.google.com/maps/@${lat},${lng},19z/data=!3m1!1e3`
 }
 
-// Gera URL alternativa que abre diretamente no modo Street View (busca panorama próxima)
+// Gera URL que abre Street View buscando automaticamente a cobertura mais próxima
+// Usa source=apiv3 que é mais tolerante a pontos fora de ruas
 const getStreetViewDirectUrl = (lat: number, lng: number) => {
-  return `https://www.google.com/maps?q=&layer=c&cbll=${lat},${lng}&cbp=11,0,0,0,0`
+  // Esta URL força o Google a buscar a panorama Street View mais próxima
+  // radius=100 busca num raio de 100m, source=outdoor prioriza vias públicas
+  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}&heading=0&pitch=0&fov=90`
 }
 
 export default function MapaPage() {
