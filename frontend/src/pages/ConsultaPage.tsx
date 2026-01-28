@@ -5,7 +5,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { aneelApi } from '@/services/api'
-import type { FiltroConsulta, ConsultaResponse, OpcoesFiltros, ClienteANEEL } from '@/types'
+import type { FiltroConsulta, ConsultaResponse, OpcoesFiltros, ClienteANEEL, ConsultaSalva } from '@/types'
 import toast from 'react-hot-toast'
 import {
   MagnifyingGlassIcon,
@@ -13,6 +13,7 @@ import {
   FunnelIcon,
   XMarkIcon,
   MapPinIcon,
+  BookmarkIcon,
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import { useDebounce } from '@/hooks/usePerformance'
@@ -199,6 +200,12 @@ export default function ConsultaPage() {
   const [demandaValor, setDemandaValor] = useState<number>(0)
   const [energiaOperador, setEnergiaOperador] = useState<'Todos' | 'Maior que' | 'Menor que'>('Todos')
   const [energiaValor, setEnergiaValor] = useState<number>(0)
+  
+  // Estados para consultas salvas
+  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [showSavedQueries, setShowSavedQueries] = useState(false)
+  const [queryName, setQueryName] = useState('')
+  const [queryDescription, setQueryDescription] = useState('')
 
   // Filtros de busca por texto com debounce para melhor performance
   const [searchMunicipio, setSearchMunicipio] = useState('')
@@ -234,6 +241,35 @@ export default function ConsultaPage() {
   const { data: opcoesFiltros } = useQuery<OpcoesFiltros>({
     queryKey: ['opcoes-filtros'],
     queryFn: aneelApi.opcoesFiltros,
+  })
+  
+  // Carregar consultas salvas
+  const { data: consultasSalvas, refetch: refetchSalvas } = useQuery<ConsultaSalva[]>({
+    queryKey: ['consultas-salvas', 'consulta'],
+    queryFn: () => aneelApi.listarConsultasSalvas('consulta'),
+  })
+  
+  // Mutation para salvar consulta
+  const salvarConsultaMutation = useMutation({
+    mutationFn: aneelApi.salvarConsulta,
+    onSuccess: () => {
+      toast.success('Consulta salva com sucesso!')
+      setShowSaveModal(false)
+      setQueryName('')
+      setQueryDescription('')
+      refetchSalvas()
+    },
+    onError: () => toast.error('Erro ao salvar consulta'),
+  })
+  
+  // Mutation para excluir consulta
+  const excluirConsultaMutation = useMutation({
+    mutationFn: aneelApi.excluirConsultaSalva,
+    onSuccess: () => {
+      toast.success('Consulta excluída!')
+      refetchSalvas()
+    },
+    onError: () => toast.error('Erro ao excluir'),
   })
   
   const buildFiltros = () => {
@@ -343,6 +379,71 @@ export default function ConsultaPage() {
   const onSubmit = () => {
     consultaMutation.mutate(buildFiltros())
   }
+  
+  // Salvar consulta atual
+  const handleSaveQuery = () => {
+    if (!queryName.trim()) {
+      toast.error('Digite um nome para a consulta')
+      return
+    }
+    salvarConsultaMutation.mutate({
+      name: queryName,
+      description: queryDescription,
+      filters: buildFiltros(),
+      query_type: 'consulta',
+    })
+  }
+  
+  // Aplicar consulta salva
+  const aplicarConsultaSalva = async (consulta: ConsultaSalva) => {
+    try {
+      const result = await aneelApi.usarConsultaSalva(consulta.id)
+      const f = result.filters
+      
+      // Aplicar filtros salvos
+      setSelectedUf(f.uf || '')
+      setSelectedMunicipios(f.municipios || [])
+      setSelectedMicrorregioes(f.microrregioes || [])
+      setSelectedMesorregioes(f.mesorregioes || [])
+      setSelectedClasses(f.classes_cliente || [])
+      setSelectedGrupos(f.grupos_tarifarios || [])
+      
+      if (f.possui_solar === true) {
+        setSolarFilter({ com: true, sem: false })
+      } else if (f.possui_solar === false) {
+        setSolarFilter({ com: false, sem: true })
+      } else {
+        setSolarFilter({ com: false, sem: false })
+      }
+      
+      if (f.demanda_min) {
+        setDemandaOperador('Maior que')
+        setDemandaValor(f.demanda_min)
+      } else if (f.demanda_max) {
+        setDemandaOperador('Menor que')
+        setDemandaValor(f.demanda_max)
+      } else {
+        setDemandaOperador('Todos')
+        setDemandaValor(0)
+      }
+      
+      if (f.energia_max_min) {
+        setEnergiaOperador('Maior que')
+        setEnergiaValor(f.energia_max_min)
+      } else if (f.energia_max_max) {
+        setEnergiaOperador('Menor que')
+        setEnergiaValor(f.energia_max_max)
+      } else {
+        setEnergiaOperador('Todos')
+        setEnergiaValor(0)
+      }
+      
+      setShowSavedQueries(false)
+      toast.success(`Consulta "${consulta.name}" carregada`)
+    } catch {
+      toast.error('Erro ao carregar consulta')
+    }
+  }
 
   const handleReset = () => {
     reset()
@@ -431,13 +532,24 @@ export default function ConsultaPage() {
               Base de Dados Geográfica da Distribuidora - ANEEL
             </p>
           </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="btn-outline bg-white/10 border-white/20 text-white hover:bg-white/20 text-lg px-6 py-3"
-          >
-            {showFilters ? <XMarkIcon className="w-6 h-6" /> : <FunnelIcon className="w-6 h-6" />}
-            <span className="ml-2 font-semibold">{showFilters ? 'Ocultar Filtros' : 'Mostrar Filtros'}</span>
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowSavedQueries(true)}
+              className="btn-outline bg-white/10 border-white/20 text-white hover:bg-white/20 px-4 py-2"
+            >
+              <BookmarkIcon className="w-5 h-5" />
+              <span className="ml-2 font-semibold">📂 Consultas Salvas</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFilters(!showFilters)}
+              className="btn-outline bg-white/10 border-white/20 text-white hover:bg-white/20 px-4 py-2"
+            >
+              {showFilters ? <XMarkIcon className="w-5 h-5" /> : <FunnelIcon className="w-5 h-5" />}
+              <span className="ml-2 font-semibold">{showFilters ? 'Ocultar Filtros' : 'Mostrar Filtros'}</span>
+            </button>
+          </div>
         </div>
         <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10" />
         <div className="absolute -left-10 -bottom-10 h-48 w-48 rounded-full bg-white/10" />
@@ -798,6 +910,15 @@ export default function ConsultaPage() {
             >
               Limpar Filtros
             </button>
+            
+            <button
+              type="button"
+              onClick={() => setShowSaveModal(true)}
+              className="inline-flex items-center px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 font-medium rounded-lg transition-colors"
+            >
+              <BookmarkIcon className="w-5 h-5 mr-2" />
+              💾 Salvar Consulta
+            </button>
           </div>
         </form>
       )}
@@ -1115,6 +1236,111 @@ export default function ConsultaPage() {
                     <span className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-blue-500 border-2 border-white shadow"></span>
                     <span className="text-[10px] md:text-xs">Sem Solar</span>
                   </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal Salvar Consulta */}
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">💾 Salvar Consulta</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="label font-semibold">Nome da Consulta *</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={queryName}
+                  onChange={(e) => setQueryName(e.target.value)}
+                  placeholder="Ex: Clientes A4 com Solar em SP"
+                />
+              </div>
+              <div>
+                <label className="label font-semibold">Descrição (opcional)</label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  value={queryDescription}
+                  onChange={(e) => setQueryDescription(e.target.value)}
+                  placeholder="Descreva esta consulta..."
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleSaveQuery}
+                  disabled={salvarConsultaMutation.isPending}
+                  className="btn-primary flex-1"
+                >
+                  {salvarConsultaMutation.isPending ? 'Salvando...' : '💾 Salvar'}
+                </button>
+                <button
+                  onClick={() => setShowSaveModal(false)}
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal Consultas Salvas */}
+      {showSavedQueries && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            <div className="p-6 border-b">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-bold text-gray-800">📂 Consultas Salvas</h3>
+                <button
+                  onClick={() => setShowSavedQueries(false)}
+                  className="text-gray-500 hover:text-gray-700 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {consultasSalvas && consultasSalvas.length > 0 ? (
+                <div className="space-y-3">
+                  {consultasSalvas.map((consulta) => (
+                    <div key={consulta.id} className="border rounded-lg p-4 hover:border-blue-300 transition-colors">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h4 className="font-bold text-gray-800">{consulta.name}</h4>
+                          {consulta.description && (
+                            <p className="text-sm text-gray-600 mt-1">{consulta.description}</p>
+                          )}
+                          <p className="text-xs text-gray-400 mt-2">
+                            Usado {consulta.use_count}x • Criado em {new Date(consulta.created_at).toLocaleDateString('pt-BR')}
+                          </p>
+                        </div>
+                        <div className="flex gap-2 ml-4">
+                          <button
+                            onClick={() => aplicarConsultaSalva(consulta)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm font-medium"
+                          >
+                            ▶️ Usar
+                          </button>
+                          <button
+                            onClick={() => excluirConsultaMutation.mutate(consulta.id)}
+                            className="bg-red-100 hover:bg-red-200 text-red-600 px-3 py-1 rounded text-sm"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p className="text-lg">Nenhuma consulta salva</p>
+                  <p className="text-sm mt-2">Configure filtros e clique em "💾 Salvar Consulta"</p>
                 </div>
               )}
             </div>
