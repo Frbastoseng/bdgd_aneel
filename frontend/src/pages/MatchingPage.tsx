@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, Fragment } from 'react'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { matchingApi } from '@/services/api'
 import type { BdgdClienteComMatch, MatchItem, MatchingStats, MatchingPaginated } from '@/types'
 import {
@@ -13,6 +13,7 @@ import {
   EnvelopeIcon,
   MapPinIcon,
   BuildingOffice2Icon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline'
 import {
   CheckCircleIcon,
@@ -96,7 +97,15 @@ function MatchDetail({ match }: { match: MatchItem }) {
             <p className="text-xs text-gray-500 dark:text-gray-400">{match.nome_fantasia}</p>
           )}
         </div>
-        <ScoreBadge score={match.score_total} />
+        <div className="flex items-center gap-2">
+          {match.address_source === 'geocoded' && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 dark:bg-purple-900/30 px-2 py-0.5 text-xs font-medium text-purple-800 dark:text-purple-300">
+              <MapPinIcon className="h-3 w-3" />
+              Via Geocode
+            </span>
+          )}
+          <ScoreBadge score={match.score_total} />
+        </div>
       </div>
 
       {/* Score breakdown */}
@@ -168,6 +177,9 @@ export default function MatchingPage() {
   const [page, setPage] = useState(1)
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const perPage = 30
+  const [refining, setRefining] = useState(false)
+  const [refineResult, setRefineResult] = useState<{ refined: number; geocoded: number; improved: number } | null>(null)
+  const queryClient = useQueryClient()
 
   // Debounce search
   useEffect(() => {
@@ -209,6 +221,24 @@ export default function MatchingPage() {
     setExpandedRow((prev) => (prev === codId ? null : codId))
   }, [])
 
+  const handleRefine = useCallback(async () => {
+    if (!results?.data?.length || refining) return
+    const codIds = results.data.map((c: BdgdClienteComMatch) => c.cod_id)
+    setRefining(true)
+    setRefineResult(null)
+    try {
+      const result = await matchingApi.refineMatches(codIds)
+      setRefineResult(result)
+      // Recarregar dados após refinamento
+      queryClient.invalidateQueries({ queryKey: ['matching-results'] })
+      queryClient.invalidateQueries({ queryKey: ['matching-stats'] })
+    } catch {
+      setRefineResult({ refined: 0, geocoded: 0, improved: -1 })
+    } finally {
+      setRefining(false)
+    }
+  }, [results, refining, queryClient])
+
   const UFS = [
     'AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT',
     'PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO',
@@ -222,13 +252,13 @@ export default function MatchingPage() {
           Matching BDGD - CNPJ
         </h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Descoberta automatica de CNPJs para clientes BDGD por CEP, CNAE, endereco e bairro
+          Descoberta automatica de CNPJs para clientes BDGD por CEP, CNAE, endereco, bairro e coordenadas geocodificadas
         </p>
       </div>
 
       {/* Stats Cards */}
       {!statsLoading && stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className={`grid grid-cols-2 md:grid-cols-4 ${stats.via_geocode ? 'lg:grid-cols-8' : 'lg:grid-cols-7'} gap-3`}>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
             <p className="text-xs text-gray-500 dark:text-gray-400">Total Clientes</p>
             <p className="text-lg font-bold text-gray-900 dark:text-white">
@@ -271,6 +301,14 @@ export default function MatchingPage() {
               {stats.baixa_confianca.toLocaleString('pt-BR')}
             </p>
           </div>
+          {(stats.via_geocode ?? 0) > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+              <p className="text-xs text-purple-600 dark:text-purple-400">Via Geocode</p>
+              <p className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                {stats.via_geocode?.toLocaleString('pt-BR')}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -308,16 +346,54 @@ export default function MatchingPage() {
         </select>
       </div>
 
-      {/* Results count */}
+      {/* Results count + Afinar Busca */}
       {results && (
         <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
-          <span>
-            {results.total.toLocaleString('pt-BR')} clientes encontrados
-            {isFetching && ' (atualizando...)'}
-          </span>
+          <div className="flex items-center gap-3">
+            <span>
+              {results.total.toLocaleString('pt-BR')} clientes encontrados
+              {isFetching && ' (atualizando...)'}
+            </span>
+            {results.data?.length > 0 && (
+              <button
+                onClick={handleRefine}
+                disabled={refining}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Geocodifica coordenadas e re-faz matching para melhorar os scores desta pagina"
+              >
+                <ArrowPathIcon className={`h-3.5 w-3.5 ${refining ? 'animate-spin' : ''}`} />
+                {refining ? 'Afinando...' : 'Afinar Busca'}
+              </button>
+            )}
+          </div>
           <span>
             Pagina {page} de {totalPages}
           </span>
+        </div>
+      )}
+
+      {/* Refine result feedback */}
+      {refineResult && (
+        <div className={`rounded-lg p-3 text-sm ${
+          refineResult.improved === -1
+            ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+            : 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300'
+        }`}>
+          {refineResult.improved === -1 ? (
+            <span>Erro ao refinar busca. Tente novamente.</span>
+          ) : (
+            <span>
+              Refinamento concluido: <strong>{refineResult.refined}</strong> clientes processados,{' '}
+              <strong>{refineResult.geocoded}</strong> novos enderecos geocodificados,{' '}
+              <strong>{refineResult.improved}</strong> scores melhorados.
+            </span>
+          )}
+          <button
+            onClick={() => setRefineResult(null)}
+            className="ml-2 text-xs underline hover:no-underline"
+          >
+            fechar
+          </button>
         </div>
       )}
 
@@ -449,6 +525,49 @@ export default function MatchingPage() {
                                 </div>
                               </div>
                             </div>
+
+                            {/* Endereço Geocodificado */}
+                            {cliente.geo_cep && (
+                              <div className="mb-4 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                                <h4 className="text-sm font-semibold text-purple-800 dark:text-purple-300 mb-2 flex items-center gap-1">
+                                  <MapPinIcon className="h-4 w-4" />
+                                  Endereco Geocodificado (via coordenadas)
+                                </h4>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                                  {cliente.geo_logradouro && (
+                                    <div>
+                                      <span className="text-gray-500 dark:text-gray-400">Logradouro:</span>{' '}
+                                      <span className="text-gray-900 dark:text-white">{cliente.geo_logradouro}</span>
+                                    </div>
+                                  )}
+                                  {cliente.geo_bairro && (
+                                    <div>
+                                      <span className="text-gray-500 dark:text-gray-400">Bairro:</span>{' '}
+                                      <span className="text-gray-900 dark:text-white">{cliente.geo_bairro}</span>
+                                    </div>
+                                  )}
+                                  <div>
+                                    <span className="text-gray-500 dark:text-gray-400">CEP:</span>{' '}
+                                    <span className={`font-mono ${
+                                      cliente.cep_original && cliente.geo_cep !== cliente.cep_original?.replace(/\D/g, '')
+                                        ? 'text-orange-600 dark:text-orange-400 font-semibold'
+                                        : 'text-gray-900 dark:text-white'
+                                    }`}>
+                                      {cliente.geo_cep}
+                                      {cliente.cep_original && cliente.geo_cep !== cliente.cep_original?.replace(/\D/g, '') && (
+                                        <span className="ml-1 text-orange-500" title="CEP diferente do BDGD">*</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  {cliente.geo_municipio && (
+                                    <div>
+                                      <span className="text-gray-500 dark:text-gray-400">Municipio:</span>{' '}
+                                      <span className="text-gray-900 dark:text-white">{cliente.geo_municipio}/{cliente.geo_uf}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
 
                             {/* Matches */}
                             <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">

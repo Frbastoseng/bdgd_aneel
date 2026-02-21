@@ -1,6 +1,6 @@
 """Router para consulta de matching BDGD -> CNPJ."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_active_user
@@ -12,6 +12,7 @@ from app.schemas.matching import (
     MatchingStats,
 )
 from app.services.matching_service import MatchingService
+from app.services.refine_service import RefineService
 
 router = APIRouter(prefix="/matching", tags=["Matching BDGD-CNPJ"])
 
@@ -42,6 +43,45 @@ async def list_matches(
     return await MatchingService.list_matches(
         db, search, uf, min_score, confianca, page, per_page
     )
+
+
+@router.post("/batch-lookup")
+async def batch_lookup(
+    cod_ids: list[str] = Body(..., embed=True),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Retorna o melhor match CNPJ para uma lista de cod_ids (max 1000).
+
+    Usado para enriquecer dados ANEEL na ConsultaPage e MapaPage.
+    """
+    if len(cod_ids) > 1000:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximo de 1000 cod_ids por requisicao.",
+        )
+    return await MatchingService.batch_lookup(db, cod_ids)
+
+
+@router.post("/refine")
+async def refine_matches(
+    cod_ids: list[str] = Body(..., embed=True, max_length=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Geocodifica coordenadas e re-faz matching para uma lista de clientes (max 100).
+
+    Fluxo:
+      1. Geocodifica coordenadas via Nominatim (com cache)
+      2. Re-calcula matching com dupla fonte de endereco (BDGD + geocodificado)
+      3. Retorna contagem de resultados melhorados
+    """
+    if len(cod_ids) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximo de 100 clientes por requisicao.",
+        )
+    return await RefineService.refine_clientes(db, cod_ids)
 
 
 @router.get("/results/{cod_id}", response_model=BdgdClienteComMatch)

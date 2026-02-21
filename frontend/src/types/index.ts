@@ -217,7 +217,7 @@ export interface ConsultaSalva {
   name: string
   description?: string
   filters: Record<string, unknown>
-  query_type: 'consulta' | 'mapa' | 'tarifas'
+  query_type: 'consulta' | 'mapa' | 'tarifas' | 'b3'
   created_at: string
   updated_at?: string
   last_used_at?: string
@@ -228,7 +228,7 @@ export interface CriarConsultaSalva {
   name: string
   description?: string
   filters: Record<string, unknown>
-  query_type?: 'consulta' | 'mapa' | 'tarifas'
+  query_type?: 'consulta' | 'mapa' | 'tarifas' | 'b3'
 }
 
 // Tipos CNPJ
@@ -351,6 +351,7 @@ export interface MatchItem {
   cnpj_situacao?: string | null
   cnpj_telefone?: string | null
   cnpj_email?: string | null
+  address_source?: string | null
 }
 
 export interface BdgdClienteComMatch {
@@ -369,6 +370,12 @@ export interface BdgdClienteComMatch {
   possui_solar?: boolean
   point_x?: number | null
   point_y?: number | null
+  // Endereço geocodificado (via coordenadas do transformador)
+  geo_logradouro?: string | null
+  geo_bairro?: string | null
+  geo_cep?: string | null
+  geo_municipio?: string | null
+  geo_uf?: string | null
   matches: MatchItem[]
   best_score?: number | null
 }
@@ -389,4 +396,163 @@ export interface MatchingStats {
   media_confianca: number
   baixa_confianca: number
   total_matches: number
+  via_geocode?: number
+}
+
+// ============ Tipos BDGD B3 ============
+
+export interface FiltroB3 {
+  [key: string]: unknown
+  uf?: string
+  municipios?: string[]
+  classes_cliente?: string[]
+  grupos_tarifarios?: string[]
+  fas_con?: string
+  sit_ativ?: string
+  area_loc?: string
+  possui_solar?: boolean
+  cnae?: string
+  cep?: string
+  bairro?: string
+  logradouro?: string
+  consumo_medio_min?: number
+  consumo_medio_max?: number
+  consumo_anual_min?: number
+  consumo_anual_max?: number
+  car_inst_min?: number
+  car_inst_max?: number
+  dic_anual_min?: number
+  dic_anual_max?: number
+  fic_anual_min?: number
+  fic_anual_max?: number
+  page?: number
+  per_page?: number
+}
+
+export interface ClienteB3 {
+  cod_id?: string
+  dist?: string
+  pac?: string
+  mun?: string
+  nome_uf?: string
+  nome_municipio?: string
+  lgrd?: string
+  brr?: string
+  cep?: string
+  clas_sub?: string
+  clas_sub_descricao?: string
+  cnae?: string
+  fas_con?: string
+  gru_ten?: string
+  gru_tar?: string
+  sit_ativ?: string
+  area_loc?: string
+  tip_cc?: string
+  car_inst?: number
+  consumo_anual?: number
+  consumo_medio?: number
+  ene_max?: number
+  ene_01?: number; ene_02?: number; ene_03?: number; ene_04?: number
+  ene_05?: number; ene_06?: number; ene_07?: number; ene_08?: number
+  ene_09?: number; ene_10?: number; ene_11?: number; ene_12?: number
+  dic_01?: number; dic_02?: number; dic_03?: number; dic_04?: number
+  dic_05?: number; dic_06?: number; dic_07?: number; dic_08?: number
+  dic_09?: number; dic_10?: number; dic_11?: number; dic_12?: number
+  dic_anual?: number
+  fic_01?: number; fic_02?: number; fic_03?: number; fic_04?: number
+  fic_05?: number; fic_06?: number; fic_07?: number; fic_08?: number
+  fic_09?: number; fic_10?: number; fic_11?: number; fic_12?: number
+  fic_anual?: number
+  ceg_gd?: string
+  possui_solar?: boolean
+  latitude?: number
+  longitude?: number
+  dat_con?: string
+}
+
+export interface ConsultaB3Response {
+  dados: ClienteB3[]
+  total: number
+  page: number
+  per_page: number
+  total_pages: number
+  estatisticas?: Record<string, unknown>
+}
+
+export interface PontoMapaB3 {
+  id: string
+  latitude: number
+  longitude: number
+  cod_id?: string
+  titulo?: string
+  classe?: string
+  grupo_tarifario?: string
+  fas_con?: string
+  municipio?: string
+  uf?: string
+  consumo_medio?: number
+  consumo_anual?: number
+  carga_instalada?: number
+  dic_anual?: number
+  fic_anual?: number
+  possui_solar: boolean
+  cluster_id?: number
+}
+
+export interface MapaB3Response {
+  pontos: PontoMapaB3[]
+  total: number
+  centro: { lat: number; lng: number }
+  zoom: number
+  estatisticas?: {
+    total_pontos: number
+    total_base: number
+    com_solar: number
+    consumo_medio_total?: number
+  }
+}
+
+export interface OpcoesFiltrosB3 {
+  ufs: string[]
+  municipios_por_uf: Record<string, string[]>
+  grupos_tarifarios: string[]
+  classes_cliente: string[]
+  fases_conexao: Array<{ codigo: string; descricao: string }>
+  situacoes: Array<{ codigo: string; descricao: string }>
+  areas: Array<{ codigo: string; descricao: string }>
+}
+
+// Listas de Prospecção B3
+export interface ListaProspeccao {
+  id: number
+  nome: string
+  descricao?: string | null
+  filtros_aplicados?: Record<string, unknown>
+  created_at?: string
+  updated_at?: string
+  total_unidades: number
+}
+
+export interface ListaProspeccaoDetalhe extends ListaProspeccao {
+  unidades: Array<{ cod_id: string; added_at?: string }>
+}
+
+// Tipo para batch lookup (melhor match resumido)
+export interface MatchSummary {
+  cnpj: string
+  score_total: number
+  razao_social?: string | null
+  nome_fantasia?: string | null
+  telefone?: string | null
+  email?: string | null
+  logradouro?: string | null
+  numero?: string | null
+  bairro?: string | null
+  cep?: string | null
+  municipio?: string | null
+  uf?: string | null
+  cnae?: string | null
+  cnae_descricao?: string | null
+  situacao?: string | null
+  address_source?: string | null
 }

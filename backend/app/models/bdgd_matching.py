@@ -1,4 +1,4 @@
-"""Modelos para matching BDGD → CNPJ."""
+"""Modelos para matching BDGD → CNPJ e geocodificação reversa."""
 
 from datetime import datetime
 
@@ -8,6 +8,41 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+
+
+class GeocodeCache(Base):
+    """Cache de geocodificação reversa (coordenadas → endereço)."""
+
+    __tablename__ = "geocode_cache"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    lat_round: Mapped[str] = mapped_column(String(12), nullable=False)
+    lon_round: Mapped[str] = mapped_column(String(12), nullable=False)
+    lat_original: Mapped[float | None] = mapped_column(Float)
+    lon_original: Mapped[float | None] = mapped_column(Float)
+
+    logradouro: Mapped[str | None] = mapped_column(String(300))
+    numero: Mapped[str | None] = mapped_column(String(20))
+    bairro: Mapped[str | None] = mapped_column(String(200))
+    cep: Mapped[str | None] = mapped_column(String(8), index=True)
+    municipio: Mapped[str | None] = mapped_column(String(100))
+    uf: Mapped[str | None] = mapped_column(String(2))
+    endereco_completo: Mapped[str | None] = mapped_column(String(500))
+
+    source: Mapped[str] = mapped_column(String(20), default="nominatim")
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    error_msg: Mapped[str | None] = mapped_column(Text)
+
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default="now()"
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default="now()"
+    )
+
+    __table_args__ = (
+        Index("ix_geocode_cache_coords", "lat_round", "lon_round", unique=True),
+    )
 
 
 class BdgdCliente(Base):
@@ -40,6 +75,16 @@ class BdgdCliente(Base):
     # Coordenadas
     point_x: Mapped[float | None] = mapped_column(Float)
     point_y: Mapped[float | None] = mapped_column(Float)
+
+    # Endereço geocodificado (via coordenadas → Nominatim)
+    geo_logradouro: Mapped[str | None] = mapped_column(String(300))
+    geo_numero: Mapped[str | None] = mapped_column(String(20))
+    geo_bairro: Mapped[str | None] = mapped_column(String(200))
+    geo_cep: Mapped[str | None] = mapped_column(String(8), index=True)
+    geo_municipio: Mapped[str | None] = mapped_column(String(100))
+    geo_uf: Mapped[str | None] = mapped_column(String(2))
+    geo_source: Mapped[str | None] = mapped_column(String(20))
+    geo_status: Mapped[str | None] = mapped_column(String(20))
 
     # Dados do cliente BDGD
     clas_sub: Mapped[str | None] = mapped_column(String(10))
@@ -78,6 +123,9 @@ class BdgdCnpjMatch(Base):
 
     # Ranking (1 = melhor match)
     rank: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Fonte do endereço que gerou o match ('bdgd' ou 'geocoded')
+    address_source: Mapped[str | None] = mapped_column(String(20), default="bdgd")
 
     # Dados resumidos do CNPJ (para evitar joins)
     razao_social: Mapped[str | None] = mapped_column(String(200))

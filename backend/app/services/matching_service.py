@@ -27,7 +27,8 @@ class MatchingService:
                     AVG(CASE WHEN rank = 1 THEN score_total END) as avg_score_top1,
                     COUNT(CASE WHEN rank = 1 AND score_total >= 75 THEN 1 END) as alta_confianca,
                     COUNT(CASE WHEN rank = 1 AND score_total >= 50 AND score_total < 75 THEN 1 END) as media_confianca,
-                    COUNT(CASE WHEN rank = 1 AND score_total >= 15 AND score_total < 50 THEN 1 END) as baixa_confianca
+                    COUNT(CASE WHEN rank = 1 AND score_total >= 15 AND score_total < 50 THEN 1 END) as baixa_confianca,
+                    COUNT(CASE WHEN rank = 1 AND address_source = 'geocoded' THEN 1 END) as via_geocode
                 FROM bdgd_cnpj_matches
             )
             SELECT
@@ -37,7 +38,8 @@ class MatchingService:
                 ms.avg_score_top1,
                 ms.alta_confianca,
                 ms.media_confianca,
-                ms.baixa_confianca
+                ms.baixa_confianca,
+                ms.via_geocode
             FROM approx a, match_stats ms
         """))
         row = result.fetchone()
@@ -54,6 +56,7 @@ class MatchingService:
             "alta_confianca": row[4] or 0,
             "media_confianca": row[5] or 0,
             "baixa_confianca": row[6] or 0,
+            "via_geocode": row[7] or 0,
         }
 
     @staticmethod
@@ -118,7 +121,8 @@ class MatchingService:
                 c.municipio_nome, c.uf, c.clas_sub, c.gru_tar,
                 c.dem_cont, c.ene_max, c.liv, c.possui_solar,
                 c.point_x, c.point_y,
-                m.score_total as best_score
+                m.score_total as best_score,
+                c.geo_logradouro, c.geo_bairro, c.geo_cep, c.geo_municipio, c.geo_uf
             FROM bdgd_clientes c
             JOIN bdgd_cnpj_matches m ON m.bdgd_cod_id = c.cod_id AND m.rank = 1
             WHERE {where_sql}
@@ -141,7 +145,7 @@ class MatchingService:
                        razao_social, nome_fantasia, cnpj_logradouro, cnpj_numero,
                        cnpj_bairro, cnpj_cep, cnpj_municipio, cnpj_uf,
                        cnpj_cnae, cnpj_cnae_descricao, cnpj_situacao,
-                       cnpj_telefone, cnpj_email
+                       cnpj_telefone, cnpj_email, address_source
                 FROM bdgd_cnpj_matches
                 WHERE bdgd_cod_id = :cod_id
                 ORDER BY rank
@@ -172,6 +176,7 @@ class MatchingService:
                     "cnpj_situacao": mrow[18],
                     "cnpj_telefone": mrow[19],
                     "cnpj_email": mrow[20],
+                    "address_source": mrow[21] or "bdgd",
                 })
 
             data.append({
@@ -191,6 +196,11 @@ class MatchingService:
                 "point_x": crow[13],
                 "point_y": crow[14],
                 "best_score": float(crow[15]) if crow[15] else None,
+                "geo_logradouro": crow[16],
+                "geo_bairro": crow[17],
+                "geo_cep": crow[18],
+                "geo_municipio": crow[19],
+                "geo_uf": crow[20],
                 "matches": matches,
             })
 
@@ -202,12 +212,53 @@ class MatchingService:
         }
 
     @staticmethod
+    async def batch_lookup(db: AsyncSession, cod_ids: list[str]) -> dict:
+        """Retorna o melhor match (rank=1) para uma lista de cod_ids.
+
+        Usado para enriquecer dados ANEEL com info de CNPJ na ConsultaPage/MapaPage.
+        """
+        if not cod_ids:
+            return {}
+
+        result = await db.execute(text("""
+            SELECT bdgd_cod_id, cnpj, score_total, razao_social, nome_fantasia,
+                   cnpj_telefone, cnpj_email, cnpj_logradouro, cnpj_numero,
+                   cnpj_bairro, cnpj_cep, cnpj_municipio, cnpj_uf,
+                   cnpj_cnae, cnpj_cnae_descricao, cnpj_situacao, address_source
+            FROM bdgd_cnpj_matches
+            WHERE bdgd_cod_id = ANY(:ids) AND rank = 1
+        """), {"ids": cod_ids})
+
+        matches = {}
+        for row in result.fetchall():
+            matches[row[0]] = {
+                "cnpj": row[1],
+                "score_total": float(row[2] or 0),
+                "razao_social": row[3],
+                "nome_fantasia": row[4],
+                "telefone": row[5],
+                "email": row[6],
+                "logradouro": row[7],
+                "numero": row[8],
+                "bairro": row[9],
+                "cep": row[10],
+                "municipio": row[11],
+                "uf": row[12],
+                "cnae": row[13],
+                "cnae_descricao": row[14],
+                "situacao": row[15],
+                "address_source": row[16] or "bdgd",
+            }
+        return matches
+
+    @staticmethod
     async def get_cliente_matches(db: AsyncSession, cod_id: str) -> dict | None:
         """Retorna detalhes de um cliente BDGD com todos os seus matches."""
         cliente_sql = """
             SELECT cod_id, lgrd_original, brr_original, cep_original, cnae_original,
                    municipio_nome, uf, clas_sub, gru_tar,
-                   dem_cont, ene_max, liv, possui_solar, point_x, point_y
+                   dem_cont, ene_max, liv, possui_solar, point_x, point_y,
+                   geo_logradouro, geo_bairro, geo_cep, geo_municipio, geo_uf
             FROM bdgd_clientes
             WHERE cod_id = :cod_id
         """
@@ -271,5 +322,10 @@ class MatchingService:
             "point_x": crow[13],
             "point_y": crow[14],
             "best_score": float(matches[0]["score_total"]) if matches else None,
+            "geo_logradouro": crow[15],
+            "geo_bairro": crow[16],
+            "geo_cep": crow[17],
+            "geo_municipio": crow[18],
+            "geo_uf": crow[19],
             "matches": matches,
         }

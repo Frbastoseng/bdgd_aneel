@@ -26,6 +26,7 @@ class MatchItem(BaseModel):
     cnpj_situacao: str | None = None
     cnpj_telefone: str | None = None
     cnpj_email: str | None = None
+    address_source: str | None = "bdgd"  # 'bdgd' ou 'geocoded'
 
 
 class BdgdClienteComMatch(BaseModel):
@@ -45,6 +46,12 @@ class BdgdClienteComMatch(BaseModel):
     possui_solar: bool = False
     point_x: float | None = None
     point_y: float | None = None
+    # Endereço geocodificado (via coordenadas)
+    geo_logradouro: str | None = None
+    geo_bairro: str | None = None
+    geo_cep: str | None = None
+    geo_municipio: str | None = None
+    geo_uf: str | None = None
     matches: list[MatchItem] = []
     best_score: float | None = None
 
@@ -67,3 +74,4 @@ class MatchingStats(BaseModel):
     media_confianca: int  # 50-74
     baixa_confianca: int  # 15-49
     total_matches: int
+    via_geocode: int = 0  # matches melhorados pela geocodificação

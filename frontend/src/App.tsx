@@ -30,6 +30,8 @@ const UsersPage = lazy(() => import('@/pages/admin/UsersPage'))
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'))
 const CnpjPage = lazy(() => import('@/pages/CnpjPage'))
 const MatchingPage = lazy(() => import('@/pages/MatchingPage'))
+const ConsultaB3Page = lazy(() => import('@/pages/ConsultaB3Page'))
+const MapaB3Page = lazy(() => import('@/pages/MapaB3Page'))
 
 // Protected Route Component
 function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode; requireAdmin?: boolean }) {
@@ -78,6 +80,8 @@ function App() {
             <Route path="/mapa" element={<MapaPage />} />
             <Route path="/cnpj" element={<CnpjPage />} />
             <Route path="/matching" element={<MatchingPage />} />
+            <Route path="/b3/consulta" element={<ConsultaB3Page />} />
+            <Route path="/b3/mapa" element={<MapaB3Page />} />
             <Route path="/perfil" element={<ProfilePage />} />
           </Route>
           

@@ -35,12 +35,21 @@ from psycopg2.extras import execute_values
 # Configuracao
 # ──────────────────────────────────────────
 
-DB = {
+def _parse_db_url(url: str) -> dict:
+    """Parse postgresql://user:pass@host:port/db into dict for psycopg2."""
+    import re as _re
+    m = _re.match(r"postgresql(?:\+\w+)?://([^:]+):([^@]+)@([^:]+):(\d+)/(.+?)(?:\?.*)?$", url)
+    if m:
+        return {"user": m[1], "password": m[2], "host": m[3], "port": int(m[4]), "dbname": m[5]}
+    return {"host": "db", "port": 5432, "dbname": "bdgd_pro", "user": "bdgd", "password": "bdgd_secret_2024"}
+
+_db_url = os.getenv("DATABASE_URL_SYNC", "")
+DB = _parse_db_url(_db_url) if _db_url else {
     "host": os.getenv("DB_HOST", "db"),
     "port": int(os.getenv("DB_PORT", "5432")),
-    "dbname": os.getenv("DB_NAME", "bdgd_aneel_prod"),
-    "user": os.getenv("DB_USER", "bdgd_user"),
-    "password": os.getenv("DB_PASSWORD", "BdGdSecure2026"),
+    "dbname": os.getenv("DB_NAME", "bdgd_pro"),
+    "user": os.getenv("DB_USER", "bdgd"),
+    "password": os.getenv("DB_PASSWORD", "bdgd_secret_2024"),
 }
 
 PARQUET_PATH = os.getenv("PARQUET_PATH", "/app/data/dados_aneel.parquet")
@@ -344,41 +353,112 @@ def carregar_bdgd(conn, parquet_path: str, municipios_path: str, batch_size: int
 # Etapa 2: Matching
 # ──────────────────────────────────────────
 
+def _score_endereco(logr_ref, num_ref, bairro_ref, cep_ref, c_logr, c_num, c_bairro, c_cep):
+    """
+    Pontua um candidato CNPJ contra um endereço de referência.
+    Retorna (s_cep, s_end, s_num, s_brr).
+    """
+    s_cep = 0.0
+    s_end = 0.0
+    s_num = 0.0
+    s_brr = 0.0
+
+    # Score CEP (40 pts)
+    if cep_ref and c_cep and cep_ref == c_cep:
+        s_cep = 40.0
+
+    # Score endereco (ate 20 pts - similaridade Jaccard por palavras)
+    if logr_ref and c_logr:
+        c_logr_norm = normalizar_texto(c_logr)
+        if c_logr_norm:
+            palavras_ref = {p for p in logr_ref.split() if len(p) > 2}
+            palavras_cnpj = {p for p in c_logr_norm.split() if len(p) > 2}
+            if palavras_ref and palavras_cnpj:
+                intersecao = palavras_ref & palavras_cnpj
+                uniao = palavras_ref | palavras_cnpj
+                jaccard = len(intersecao) / len(uniao)
+                s_end = round(jaccard * 20.0, 2)
+
+    # Score numero (10 pts)
+    if num_ref and c_num:
+        c_num_clean = re.sub(r"\D", "", c_num)
+        if num_ref == c_num_clean:
+            s_num = 10.0
+
+    # Score bairro (ate 5 pts)
+    if bairro_ref and c_bairro:
+        c_bairro_norm = normalizar_texto(c_bairro)
+        if c_bairro_norm:
+            if bairro_ref == c_bairro_norm:
+                s_brr = 5.0
+            else:
+                palavras_b = {p for p in bairro_ref.split() if len(p) > 2}
+                palavras_c = {p for p in c_bairro_norm.split() if len(p) > 2}
+                if palavras_b and palavras_c:
+                    inter = palavras_b & palavras_c
+                    if inter:
+                        s_brr = round(len(inter) / max(len(palavras_b), len(palavras_c)) * 5.0, 2)
+
+    return s_cep, s_end, s_num, s_brr
+
+
 def executar_matching(conn, top_n: int = 3, batch_size: int = 1000):
     """
-    Executa o matching BDGD -> CNPJ usando SQL com scoring multi-criterio.
+    Executa o matching BDGD -> CNPJ usando scoring multi-criterio com DUPLA FONTE
+    de endereço: endereço original BDGD + endereço geocodificado (via coordenadas).
 
     Para cada cliente BDGD:
-      1. Busca CNPJs candidatos que compartilham CEP
-      2. Se nenhum por CEP, busca por municipio
-      3. Pontua cada candidato e guarda os top N
+      1. Busca CNPJs candidatos por CEP (BDGD e/ou geocodificado)
+      2. Se poucos, complementa com municipio + CNAE
+      3. Pontua cada candidato usando AMBOS os endereços, ficando com o melhor
+      4. Armazena os top N matches com indicação da fonte do endereço
     """
-    print("\n[MATCHING] Iniciando matching...")
+    print("\n[MATCHING] Iniciando matching (dupla fonte de endereco)...")
 
     # Limpar matches anteriores
     with conn.cursor() as cur:
         cur.execute("TRUNCATE bdgd_cnpj_matches RESTART IDENTITY")
     conn.commit()
 
-    # Contar clientes
+    # Verificar se geocodificação existe
+    has_geo = False
     with conn.cursor() as cur:
-        cur.execute("SELECT COUNT(*) FROM bdgd_clientes WHERE cep_norm IS NOT NULL")
+        cur.execute("""
+            SELECT COUNT(*) FROM bdgd_clientes
+            WHERE geo_status = 'success' AND geo_cep IS NOT NULL
+        """)
+        geo_count = cur.fetchone()[0]
+        has_geo = geo_count > 0
+
+    # Contar clientes (agora inclui quem tem CEP OU geo_cep)
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT COUNT(*) FROM bdgd_clientes
+            WHERE cep_norm IS NOT NULL OR geo_cep IS NOT NULL
+        """)
         total = cur.fetchone()[0]
+
     print(f"           {fmt_num(total)} clientes com CEP para processar")
+    if has_geo:
+        print(f"           {fmt_num(geo_count)} clientes com endereco geocodificado (dupla fonte)")
+    else:
+        print("           [INFO] Sem geocodificacao. Execute geocode_bdgd.py para melhorar resultados.")
 
     start = time.time()
     matched = 0
     no_match = 0
+    geo_improved = 0  # Contador de matches melhorados pela geocodificacao
     offset = 0
 
     while offset < total:
-        # Buscar lote de clientes BDGD
+        # Buscar lote de clientes BDGD (inclui campos geocodificados)
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT cod_id, logradouro_norm, numero_norm, bairro_norm,
-                       cep_norm, cnae_norm, cnae_5dig, municipio_nome, uf
+                       cep_norm, cnae_norm, cnae_5dig, municipio_nome, uf,
+                       geo_logradouro, geo_numero, geo_bairro, geo_cep
                 FROM bdgd_clientes
-                WHERE cep_norm IS NOT NULL
+                WHERE cep_norm IS NOT NULL OR geo_cep IS NOT NULL
                 ORDER BY id
                 OFFSET %s LIMIT %s
             """, (offset, batch_size))
@@ -391,27 +471,44 @@ def executar_matching(conn, top_n: int = 3, batch_size: int = 1000):
 
         for cliente in clientes:
             (cod_id, logr_norm, num_norm, bairro_norm,
-             cep_norm, cnae_norm, cnae_5dig, mun_nome, uf) = cliente
+             cep_norm, cnae_norm, cnae_5dig, mun_nome, uf,
+             geo_logr, geo_num, geo_bairro, geo_cep) = cliente
 
-            # Buscar candidatos: primeiro por CEP, depois por municipio
+            # ── Buscar candidatos com pool expandido ──
+            # Unir candidatos por CEP BDGD + CEP geocodificado
+            ceps_busca = set()
+            if cep_norm:
+                ceps_busca.add(cep_norm)
+            if geo_cep and geo_cep != cep_norm:
+                ceps_busca.add(geo_cep)
+
+            candidatos = []
+            cnpjs_vistos = set()
+
             with conn.cursor() as cur:
-                # Busca por CEP (principal)
-                cur.execute("""
-                    SELECT
-                        cnpj, razao_social, nome_fantasia,
-                        logradouro, numero, bairro, cep,
-                        municipio, uf, cnae_fiscal, cnae_fiscal_descricao,
-                        situacao_cadastral, telefone_1, email
-                    FROM cnpj_cache
-                    WHERE cep = %s
-                      AND situacao_cadastral = 'ATIVA'
-                    LIMIT 200
-                """, (cep_norm,))
-                candidatos = cur.fetchall()
+                # Busca por todos os CEPs disponíveis
+                for cep_busca in ceps_busca:
+                    cur.execute("""
+                        SELECT
+                            cnpj, razao_social, nome_fantasia,
+                            logradouro, numero, bairro, cep,
+                            municipio, uf, cnae_fiscal, cnae_fiscal_descricao,
+                            situacao_cadastral, telefone_1, email
+                        FROM cnpj_cache
+                        WHERE cep = %s
+                          AND situacao_cadastral = 'ATIVA'
+                        LIMIT 200
+                    """, (cep_busca,))
+                    for row in cur.fetchall():
+                        if row[0] not in cnpjs_vistos:
+                            cnpjs_vistos.add(row[0])
+                            candidatos.append(row)
 
                 # Se poucos por CEP, complementar com municipio + CNAE
                 if len(candidatos) < 5 and mun_nome and cnae_norm:
-                    cur.execute("""
+                    ceps_excluir = tuple(ceps_busca) if ceps_busca else ("",)
+                    placeholders = ",".join(["%s"] * len(ceps_excluir))
+                    cur.execute(f"""
                         SELECT
                             cnpj, razao_social, nome_fantasia,
                             logradouro, numero, bairro, cep,
@@ -421,33 +518,27 @@ def executar_matching(conn, top_n: int = 3, batch_size: int = 1000):
                         WHERE UPPER(municipio) = %s
                           AND cnae_fiscal = %s
                           AND situacao_cadastral = 'ATIVA'
-                          AND (cep IS NULL OR cep != %s)
+                          AND (cep IS NULL OR cep NOT IN ({placeholders}))
                         LIMIT 50
-                    """, (mun_nome, cnae_norm, cep_norm or ""))
-                    candidatos.extend(cur.fetchall())
+                    """, (mun_nome, cnae_norm, *ceps_excluir))
+                    for row in cur.fetchall():
+                        if row[0] not in cnpjs_vistos:
+                            cnpjs_vistos.add(row[0])
+                            candidatos.append(row)
 
             if not candidatos:
                 no_match += 1
                 continue
 
-            # Pontuar cada candidato
+            # ── Pontuar cada candidato com DUPLA FONTE ──
             scored = []
             for cand in candidatos:
                 (c_cnpj, c_razao, c_fantasia, c_logr, c_num, c_bairro,
                  c_cep, c_mun, c_uf, c_cnae, c_cnae_desc,
                  c_situacao, c_tel, c_email) = cand
 
-                s_cep = 0.0
+                # Score CNAE (independe do endereco - 25/15 pts)
                 s_cnae = 0.0
-                s_end = 0.0
-                s_num = 0.0
-                s_brr = 0.0
-
-                # Score CEP (40 pts)
-                if cep_norm and c_cep and cep_norm == c_cep:
-                    s_cep = 40.0
-
-                # Score CNAE (25/15 pts)
                 c_cnae_clean = re.sub(r"\D", "", c_cnae or "")[:7] if c_cnae else ""
                 if cnae_norm and c_cnae_clean:
                     if cnae_norm == c_cnae_clean:
@@ -455,46 +546,33 @@ def executar_matching(conn, top_n: int = 3, batch_size: int = 1000):
                     elif cnae_5dig and c_cnae_clean[:5] == cnae_5dig:
                         s_cnae = 15.0
 
-                # Score endereco (ate 20 pts - trigram similarity)
-                if logr_norm and c_logr:
-                    c_logr_norm = normalizar_texto(c_logr)
-                    if c_logr_norm:
-                        # Similaridade simples baseada em palavras comuns
-                        palavras_bdgd = set(logr_norm.split())
-                        palavras_cnpj = set(c_logr_norm.split())
-                        # Remover palavras curtas (artigos, preposicoes)
-                        palavras_bdgd = {p for p in palavras_bdgd if len(p) > 2}
-                        palavras_cnpj = {p for p in palavras_cnpj if len(p) > 2}
-                        if palavras_bdgd and palavras_cnpj:
-                            intersecao = palavras_bdgd & palavras_cnpj
-                            uniao = palavras_bdgd | palavras_cnpj
-                            jaccard = len(intersecao) / len(uniao)
-                            s_end = round(jaccard * 20.0, 2)
+                # ── Score com endereço BDGD original ──
+                bdgd_cep, bdgd_end, bdgd_num, bdgd_brr = _score_endereco(
+                    logr_norm, num_norm, bairro_norm, cep_norm,
+                    c_logr, c_num, c_bairro, c_cep,
+                )
+                score_bdgd = bdgd_cep + s_cnae + bdgd_end + bdgd_num + bdgd_brr
 
-                # Score numero (10 pts)
-                if num_norm and c_num:
-                    c_num_clean = re.sub(r"\D", "", c_num)
-                    if num_norm == c_num_clean:
-                        s_num = 10.0
+                # ── Score com endereço GEOCODIFICADO ──
+                score_geo = 0.0
+                geo_scores = (0.0, 0.0, 0.0, 0.0)
+                addr_source = "bdgd"
 
-                # Score bairro (ate 5 pts)
-                if bairro_norm and c_bairro:
-                    c_bairro_norm = normalizar_texto(c_bairro)
-                    if c_bairro_norm:
-                        if bairro_norm == c_bairro_norm:
-                            s_brr = 5.0
-                        else:
-                            # Similaridade parcial
-                            palavras_b = set(bairro_norm.split())
-                            palavras_c = set(c_bairro_norm.split())
-                            palavras_b = {p for p in palavras_b if len(p) > 2}
-                            palavras_c = {p for p in palavras_c if len(p) > 2}
-                            if palavras_b and palavras_c:
-                                inter = palavras_b & palavras_c
-                                if inter:
-                                    s_brr = round(len(inter) / max(len(palavras_b), len(palavras_c)) * 5.0, 2)
+                if geo_cep or geo_logr:
+                    geo_scores = _score_endereco(
+                        geo_logr, geo_num, geo_bairro, geo_cep,
+                        c_logr, c_num, c_bairro, c_cep,
+                    )
+                    score_geo = geo_scores[0] + s_cnae + geo_scores[1] + geo_scores[2] + geo_scores[3]
 
-                total_score = s_cep + s_cnae + s_end + s_num + s_brr
+                # ── Usar o MELHOR entre BDGD e geocodificado ──
+                if score_geo > score_bdgd:
+                    s_cep, s_end, s_num, s_brr = geo_scores
+                    total_score = score_geo
+                    addr_source = "geocoded"
+                else:
+                    s_cep, s_end, s_num, s_brr = bdgd_cep, bdgd_end, bdgd_num, bdgd_brr
+                    total_score = score_bdgd
 
                 if total_score >= 15:  # Score minimo para ser relevante
                     scored.append((
@@ -502,6 +580,7 @@ def executar_matching(conn, top_n: int = 3, batch_size: int = 1000):
                         c_cnpj, c_razao, c_fantasia, c_logr, c_num,
                         c_bairro, c_cep, c_mun, c_uf, c_cnae,
                         c_cnae_desc, c_situacao, c_tel, c_email,
+                        addr_source,
                     ))
 
             if not scored:
@@ -514,7 +593,8 @@ def executar_matching(conn, top_n: int = 3, batch_size: int = 1000):
                 (total_score, s_cep, s_cnae, s_end, s_num, s_brr,
                  c_cnpj, c_razao, c_fantasia, c_logr, c_num,
                  c_bairro, c_cep, c_mun, c_uf, c_cnae,
-                 c_cnae_desc, c_situacao, c_tel, c_email) = s
+                 c_cnae_desc, c_situacao, c_tel, c_email,
+                 addr_source) = s
 
                 insert_batch.append((
                     cod_id, c_cnpj, total_score,
@@ -522,8 +602,11 @@ def executar_matching(conn, top_n: int = 3, batch_size: int = 1000):
                     c_razao, c_fantasia, c_logr, c_num,
                     c_bairro, c_cep, c_mun, c_uf, c_cnae,
                     c_cnae_desc, c_situacao, c_tel, c_email,
+                    addr_source,
                 ))
                 matched += 1
+                if addr_source == "geocoded" and rank == 1:
+                    geo_improved += 1
 
         # Inserir lote de matches
         if insert_batch:
@@ -535,7 +618,8 @@ def executar_matching(conn, top_n: int = 3, batch_size: int = 1000):
                         score_cep, score_cnae, score_endereco, score_numero, score_bairro, rank,
                         razao_social, nome_fantasia, cnpj_logradouro, cnpj_numero,
                         cnpj_bairro, cnpj_cep, cnpj_municipio, cnpj_uf, cnpj_cnae,
-                        cnpj_cnae_descricao, cnpj_situacao, cnpj_telefone, cnpj_email
+                        cnpj_cnae_descricao, cnpj_situacao, cnpj_telefone, cnpj_email,
+                        address_source
                     ) VALUES %s""",
                     insert_batch,
                     page_size=len(insert_batch),
@@ -557,6 +641,8 @@ def executar_matching(conn, top_n: int = 3, batch_size: int = 1000):
     print(f"\n\n           Concluido em {elapsed:.1f}s")
     print(f"           {fmt_num(matched)} matches encontrados")
     print(f"           {fmt_num(no_match)} clientes sem match")
+    if has_geo:
+        print(f"           {fmt_num(geo_improved)} matches top-1 melhorados pela geocodificacao")
 
     # Estatisticas de qualidade
     with conn.cursor() as cur:
@@ -567,7 +653,8 @@ def executar_matching(conn, top_n: int = 3, batch_size: int = 1000):
                 AVG(CASE WHEN rank = 1 THEN score_total END) as avg_score_top1,
                 COUNT(CASE WHEN rank = 1 AND score_total >= 75 THEN 1 END) as alta_confianca,
                 COUNT(CASE WHEN rank = 1 AND score_total >= 50 AND score_total < 75 THEN 1 END) as media_confianca,
-                COUNT(CASE WHEN rank = 1 AND score_total >= 15 AND score_total < 50 THEN 1 END) as baixa_confianca
+                COUNT(CASE WHEN rank = 1 AND score_total >= 15 AND score_total < 50 THEN 1 END) as baixa_confianca,
+                COUNT(CASE WHEN rank = 1 AND address_source = 'geocoded' THEN 1 END) as via_geocode
             FROM bdgd_cnpj_matches
         """)
         stats = cur.fetchone()
@@ -578,6 +665,8 @@ def executar_matching(conn, top_n: int = 3, batch_size: int = 1000):
     print(f"  Alta confianca (>=75): {fmt_num(stats[3])} ({stats[3]/max(stats[1],1)*100:.1f}%)")
     print(f"  Media confianca (50-74): {fmt_num(stats[4])} ({stats[4]/max(stats[1],1)*100:.1f}%)")
     print(f"  Baixa confianca (15-49): {fmt_num(stats[5])} ({stats[5]/max(stats[1],1)*100:.1f}%)")
+    if has_geo:
+        print(f"  Matches via geocodificacao: {fmt_num(stats[6])} ({stats[6]/max(stats[1],1)*100:.1f}%)")
 
 
 # ──────────────────────────────────────────

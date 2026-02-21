@@ -492,7 +492,7 @@ class ANEELService:
         
         for _, row in df_valid.iterrows():
             ponto = PontoMapa(
-                id=str(row.get("COD_ID", row.name)),
+                id=str(row.get("COD_ID_ENCR", row.name)),
                 latitude=float(row["POINT_Y"]),
                 longitude=float(row["POINT_X"]),
                 titulo=f"Demanda: {row.get('DEM_CONT', 'N/A')} kW",

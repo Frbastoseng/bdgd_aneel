@@ -53,7 +53,7 @@ async def consultar_dados(
         clientes = []
         for d in dados:
             cliente = ClienteANEEL(
-                cod_id=d.get("COD_ID"),
+                cod_id=d.get("COD_ID_ENCR"),
                 mun=d.get("MUN"),
                 nome_uf=d.get("Nome_UF"),
                 nome_municipio=d.get("Nome_Município"),
@@ -435,11 +435,11 @@ async def obter_pontos_mapa_avancado(
             consumo_medio = sum(consumos) / len(consumos) if consumos else 0
             
             ponto = PontoMapaCompleto(
-                id=str(row.get("COD_ID", idx)),
+                id=str(row.get("COD_ID_ENCR", idx)),
                 latitude=lat,
                 longitude=lng,
-                cod_id=str(row.get("COD_ID", "")),
-                titulo=str(row.get("Nome_Município", "") or row.get("COD_ID", "")),
+                cod_id=str(row.get("COD_ID_ENCR", "")),
+                titulo=str(row.get("Nome_Município", "") or row.get("COD_ID_ENCR", "")),
                 tipo_consumidor="livre" if row.get("LIV") == 1 else "cativo",
                 classe=CLAS_SUB_MAP.get(str(row.get("CLAS_SUB", "")), str(row.get("CLAS_SUB", ""))),
                 grupo_tarifario=str(row.get("GRU_TAR", "")),
@@ -536,7 +536,7 @@ async def exportar_selecao_mapa(
     
     # Preparar dados para exportação
     colunas_export = [
-        "COD_ID", "Nome_UF", "Nome_Município", "CLAS_SUB", "GRU_TAR", "LIV",
+        "COD_ID_ENCR", "Nome_UF", "Nome_Município", "CLAS_SUB", "GRU_TAR", "LIV",
         "DEM_CONT", "CAR_INST", "ENE_MAX", "CEG_GD", "POINT_X", "POINT_Y"
     ]
     colunas_disponiveis = [c for c in colunas_export if c in df_area.columns]
@@ -544,7 +544,7 @@ async def exportar_selecao_mapa(
     
     # Renomear colunas para português
     renome = {
-        "COD_ID": "Código",
+        "COD_ID_ENCR": "Código",
         "Nome_UF": "Estado",
         "Nome_Município": "Município",
         "CLAS_SUB": "Classe",

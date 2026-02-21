@@ -19,6 +19,8 @@ import {
   MoonIcon,
   BuildingOffice2Icon,
   LinkIcon,
+  BoltIcon,
+  MapPinIcon,
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 
@@ -29,6 +31,11 @@ const navigation = [
   { name: 'Mapa', href: '/mapa', icon: MapIcon },
   { name: 'Cadastro CNPJ', href: '/cnpj', icon: BuildingOffice2Icon },
   { name: 'Matching CNPJ', href: '/matching', icon: LinkIcon },
+]
+
+const b3Navigation = [
+  { name: 'Consulta B3', href: '/b3/consulta', icon: BoltIcon },
+  { name: 'Mapa B3', href: '/b3/mapa', icon: MapPinIcon },
 ]
 
 const adminNavigation = [
@@ -96,6 +103,26 @@ export default function MainLayout() {
             </NavLink>
           ))}
           
+          {/* B3 Section */}
+          <div className="pt-4 pb-2 px-3">
+            <span className="text-xs font-semibold text-teal-500 dark:text-teal-400 uppercase tracking-wider">
+              BDGD B3
+            </span>
+          </div>
+          {b3Navigation.map((item) => (
+            <NavLink
+              key={item.name}
+              to={item.href}
+              onClick={() => setSidebarOpen(false)}
+              className={({ isActive }) =>
+                isActive ? 'sidebar-link-active' : 'sidebar-link-inactive'
+              }
+            >
+              <item.icon className="w-5 h-5 flex-shrink-0" />
+              <span>{item.name}</span>
+            </NavLink>
+          ))}
+
           {isAdmin && (
             <>
               <div className="pt-4 pb-2 px-3">
@@ -150,6 +177,25 @@ export default function MainLayout() {
               </NavLink>
             ))}
             
+            {/* B3 Section */}
+            <div className="pt-6 pb-2 px-3">
+              <span className="text-xs font-semibold text-teal-500 dark:text-teal-400 uppercase tracking-wider">
+                BDGD B3
+              </span>
+            </div>
+            {b3Navigation.map((item) => (
+              <NavLink
+                key={item.name}
+                to={item.href}
+                className={({ isActive }) =>
+                  isActive ? 'sidebar-link-active' : 'sidebar-link-inactive'
+                }
+              >
+                <item.icon className="w-5 h-5 flex-shrink-0" />
+                <span>{item.name}</span>
+              </NavLink>
+            ))}
+
             {isAdmin && (
               <>
                 <div className="pt-6 pb-2 px-3">

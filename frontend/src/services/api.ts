@@ -371,6 +371,150 @@ export const matchingApi = {
     const response = await api.get(`/matching/results/${codId}`)
     return response.data
   },
+
+  refineMatches: async (codIds: string[]) => {
+    const response = await api.post('/matching/refine', { cod_ids: codIds })
+    return response.data as { refined: number; geocoded: number; improved: number }
+  },
+
+  batchLookup: async (codIds: string[]) => {
+    const response = await api.post('/matching/batch-lookup', { cod_ids: codIds })
+    return response.data as Record<string, import('@/types').MatchSummary>
+  },
+}
+
+// API BDGD B3
+export const b3Api = {
+  consulta: async (filtros: Record<string, unknown>) => {
+    const response = await api.post('/b3/consulta', filtros)
+    return response.data
+  },
+
+  opcoesFiltros: async () => {
+    const response = await api.get('/b3/opcoes-filtros')
+    return response.data
+  },
+
+  mapaPontos: async (params: Record<string, unknown>) => {
+    const response = await api.get('/b3/mapa/pontos', { params })
+    return response.data
+  },
+
+  exportarSelecaoMapa: async (data: {
+    bounds: { north: number; south: number; east: number; west: number };
+    filtros?: Record<string, unknown>;
+    formato?: 'xlsx' | 'csv';
+  }) => {
+    const response = await api.post('/b3/mapa/exportar-selecao', data, { responseType: 'blob' })
+    return response.data
+  },
+
+  exportarCsv: async (filtros: Record<string, unknown>) => {
+    const response = await api.post('/b3/exportar/csv', filtros, { responseType: 'blob' })
+    return response.data
+  },
+
+  exportarXlsx: async (filtros: Record<string, unknown>) => {
+    const response = await api.post('/b3/exportar/xlsx', filtros, { responseType: 'blob' })
+    return response.data
+  },
+
+  exportarKml: async (filtros: Record<string, unknown>) => {
+    const response = await api.post('/b3/exportar/kml', filtros, { responseType: 'blob' })
+    return response.data
+  },
+
+  statusDados: async () => {
+    const response = await api.get('/b3/status-dados')
+    return response.data
+  },
+
+  importar: async (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await api.post('/b3/importar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return response.data
+  },
+
+  // Consultas Salvas B3
+  listarConsultasSalvas: async () => {
+    const response = await api.get('/b3/consultas-salvas')
+    return response.data
+  },
+
+  salvarConsulta: async (data: { name: string; description?: string; filters: Record<string, unknown> }) => {
+    const response = await api.post('/b3/consultas-salvas', { ...data, query_type: 'b3' })
+    return response.data
+  },
+
+  excluirConsultaSalva: async (id: number) => {
+    const response = await api.delete(`/b3/consultas-salvas/${id}`)
+    return response.data
+  },
+
+  usarConsultaSalva: async (id: number) => {
+    const response = await api.post(`/b3/consultas-salvas/${id}/usar`)
+    return response.data
+  },
+
+  // Matching B3
+  batchLookup: async (codIds: string[]) => {
+    const response = await api.post('/b3/matching/batch-lookup', { cod_ids: codIds })
+    return response.data as Record<string, import('@/types').MatchSummary>
+  },
+
+  refineMatches: async (codIds: string[]) => {
+    const response = await api.post('/b3/matching/refine', { cod_ids: codIds })
+    return response.data as { refined: number; geocoded: number; improved: number }
+  },
+
+  getClienteMatches: async (codId: string) => {
+    const response = await api.get(`/b3/matching/results/${codId}`)
+    return response.data
+  },
+
+  // Listas de Prospecção B3
+  listarListas: async () => {
+    const response = await api.get('/b3/listas')
+    return response.data
+  },
+
+  criarLista: async (data: { nome: string; descricao?: string; filtros_aplicados?: Record<string, unknown> }) => {
+    const response = await api.post('/b3/listas', data)
+    return response.data
+  },
+
+  detalheLista: async (listaId: number) => {
+    const response = await api.get(`/b3/listas/${listaId}`)
+    return response.data
+  },
+
+  adicionarUnidadesLista: async (listaId: number, codIds: string[]) => {
+    const response = await api.post(`/b3/listas/${listaId}/adicionar`, { cod_ids: codIds })
+    return response.data
+  },
+
+  removerUnidadesLista: async (listaId: number, codIds: string[]) => {
+    const response = await api.post(`/b3/listas/${listaId}/remover`, { cod_ids: codIds })
+    return response.data
+  },
+
+  excluirLista: async (listaId: number) => {
+    const response = await api.delete(`/b3/listas/${listaId}`)
+    return response.data
+  },
+
+  salvarFiltroComoLista: async (data: { nome: string; descricao?: string; filtros?: Record<string, unknown>; cod_ids: string[] }) => {
+    const response = await api.post('/b3/listas/salvar-filtro', data)
+    return response.data
+  },
+
+  exportarListaCsv: async (listaId: number) => {
+    const response = await api.get(`/b3/listas/${listaId}/exportar/csv`, { responseType: 'blob' })
+    return response.data
+  },
 }
 
 export default api

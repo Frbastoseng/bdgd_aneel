@@ -4,10 +4,23 @@ import MarkerClusterGroup from 'react-leaflet-cluster'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { aneelApi } from '@/services/api'
-import type { MapaAvancadoResponse, PontoMapaCompleto, ConsultaSalva, OpcoesFiltros } from '@/types'
+import { aneelApi, matchingApi } from '@/services/api'
+import type { MapaAvancadoResponse, PontoMapaCompleto, ConsultaSalva, OpcoesFiltros, MatchSummary } from '@/types'
 import toast from 'react-hot-toast'
 import { MagnifyingGlassIcon, MapPinIcon } from '@heroicons/react/24/outline'
+
+function formatCnpj(cnpj: string): string {
+  if (!cnpj || cnpj.length !== 14) return cnpj || ''
+  return `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}`
+}
+
+function formatPhone(phone: string | null | undefined): string {
+  if (!phone) return ''
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
+  if (digits.length === 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  return phone
+}
 
 // Ícones customizados para Leaflet - criados uma única vez
 const iconCache: Record<string, L.DivIcon> = {}
@@ -195,44 +208,44 @@ const getMarkerIcon = (ponto: PontoMapaCompleto) => {
 }
 
 // Componente Marker memoizado para performance
-const MemoizedMarker = memo(({ ponto }: { ponto: PontoMapaCompleto }) => {
+const MemoizedMarker = memo(({ ponto, matchInfo }: { ponto: PontoMapaCompleto; matchInfo?: MatchSummary }) => {
   const icon = getMarkerIcon(ponto)
-  
+
   return (
     <Marker
       position={[ponto.latitude, ponto.longitude]}
       icon={icon}
     >
-      <Tooltip 
-        direction="top" 
-        offset={[0, -6]} 
+      <Tooltip
+        direction="top"
+        offset={[0, -6]}
         opacity={0.95}
         className="custom-tooltip"
       >
-        <div className="min-w-[200px] max-w-[260px]">
+        <div className="min-w-[200px] max-w-[280px]">
           <h3 className="font-bold text-sm text-blue-800 mb-1 flex items-center gap-1">
             📍 {ponto.titulo || ponto.cod_id}
             {ponto.possui_solar && <span className="text-yellow-500">☀️</span>}
           </h3>
-          
+
           {/* Badges */}
           <div className="flex gap-1 mb-2">
             <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-              ponto.tipo_consumidor === 'livre' 
-                ? 'bg-green-100 text-green-700' 
+              ponto.tipo_consumidor === 'livre'
+                ? 'bg-green-100 text-green-700'
                 : 'bg-gray-100 text-gray-700'
             }`}>
               {ponto.tipo_consumidor === 'livre' ? '🔓 LIVRE' : '🔒 CATIVO'}
             </span>
             <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
               ponto.possui_solar
-                ? 'bg-yellow-100 text-yellow-700' 
+                ? 'bg-yellow-100 text-yellow-700'
                 : 'bg-gray-100 text-gray-600'
             }`}>
               {ponto.possui_solar ? '☀️ SOLAR' : 'SEM SOLAR'}
             </span>
           </div>
-          
+
           {/* Dados compactos */}
           <div className="space-y-0.5 text-xs border-t pt-1">
             <div className="flex justify-between">
@@ -252,7 +265,21 @@ const MemoizedMarker = memo(({ ponto }: { ponto: PontoMapaCompleto }) => {
               <span className="font-medium">{ponto.municipio || '-'}</span>
             </div>
           </div>
-          
+
+          {/* CNPJ Match Info */}
+          {matchInfo && (
+            <div className="mt-1 pt-1 border-t border-purple-200 space-y-0.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-purple-700">{formatCnpj(matchInfo.cnpj)}</span>
+                <span className={`text-[10px] font-bold px-1 py-0.5 rounded ${matchInfo.score_total >= 75 ? 'bg-green-100 text-green-700' : matchInfo.score_total >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{matchInfo.score_total.toFixed(0)}</span>
+              </div>
+              <div className="font-semibold text-gray-800 truncate">{matchInfo.razao_social}</div>
+              {matchInfo.telefone && (
+                <a href={`https://wa.me/55${matchInfo.telefone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:underline block" onClick={(e) => e.stopPropagation()}>{formatPhone(matchInfo.telefone)}</a>
+              )}
+            </div>
+          )}
+
           {/* Links */}
           <div className="mt-2 pt-1 border-t flex gap-1 text-xs">
             <a
@@ -278,7 +305,7 @@ const MemoizedMarker = memo(({ ponto }: { ponto: PontoMapaCompleto }) => {
       </Tooltip>
     </Marker>
   )
-}, (prevProps, nextProps) => prevProps.ponto.id === nextProps.ponto.id)
+}, (prevProps, nextProps) => prevProps.ponto.id === nextProps.ponto.id && prevProps.matchInfo === nextProps.matchInfo)
 MemoizedMarker.displayName = 'MemoizedMarker'
 
 export default function MapaPage() {
@@ -303,7 +330,8 @@ export default function MapaPage() {
   const [queryDescription, setQueryDescription] = useState('')
   const [pontosNaSelecao, setPontosNaSelecao] = useState<PontoMapaCompleto[]>([])
   const [shouldFetch, setShouldFetch] = useState(false)
-  
+  const [matchMap, setMatchMap] = useState<Record<string, MatchSummary>>({})
+
   // Carregar opções de filtros (UFs)
   const { data: opcoesFiltros } = useQuery<OpcoesFiltros>({
     queryKey: ['opcoes-filtros'],
@@ -372,7 +400,23 @@ export default function MapaPage() {
       setShouldFetch(false)
     }
   }, [shouldFetch, filtros, refetch])
-  
+
+  // Batch lookup CNPJ quando pontos mudam
+  useEffect(() => {
+    if (!mapaData?.pontos || mapaData.pontos.length === 0) {
+      setMatchMap({})
+      return
+    }
+    const codIds = mapaData.pontos
+      .map(p => p.cod_id)
+      .filter((id): id is string => !!id)
+    if (codIds.length === 0) return
+
+    matchingApi.batchLookup(codIds.slice(0, 1000))
+      .then(setMatchMap)
+      .catch(() => { /* silently ignore - CNPJ info is optional */ })
+  }, [mapaData])
+
   // Buscar dados
   const handleSearch = useCallback(() => {
     refetch().then((result) => {
@@ -735,7 +779,7 @@ export default function MapaPage() {
               disableClusteringAtZoom={16}
             >
               {mapaData.pontos.map((ponto) => (
-                <MemoizedMarker key={ponto.id} ponto={ponto} />
+                <MemoizedMarker key={ponto.id} ponto={ponto} matchInfo={ponto.cod_id ? matchMap[ponto.cod_id] : undefined} />
               ))}
             </MarkerClusterGroup>
           </MapContainer>
