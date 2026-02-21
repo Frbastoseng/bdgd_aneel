@@ -319,4 +319,58 @@ export const adminApi = {
   },
 }
 
+// API CNPJ
+export const cnpjApi = {
+  getCnpjCache: async (params: {
+    search?: string
+    uf?: string
+    situacao?: string
+    page?: number
+    per_page?: number
+  }) => {
+    const response = await api.get('/cnpj/cache', { params })
+    return response.data
+  },
+
+  getCnpjCacheStats: async () => {
+    const response = await api.get('/cnpj/cache/stats')
+    return response.data
+  },
+
+  getCnpjCacheDetail: async (cnpj: string) => {
+    const response = await api.get(`/cnpj/cache/${cnpj}`)
+    return response.data
+  },
+
+  searchCnpj: async (q: string, limit = 10) => {
+    const response = await api.get('/cnpj/search', { params: { q, limit } })
+    return response.data
+  },
+}
+
+// API Matching BDGD-CNPJ
+export const matchingApi = {
+  getStats: async () => {
+    const response = await api.get('/matching/stats')
+    return response.data
+  },
+
+  getResults: async (params: {
+    search?: string
+    uf?: string
+    min_score?: number
+    confianca?: string
+    page?: number
+    per_page?: number
+  }) => {
+    const response = await api.get('/matching/results', { params })
+    return response.data
+  },
+
+  getClienteMatches: async (codId: string) => {
+    const response = await api.get(`/matching/results/${codId}`)
+    return response.data
+  },
+}
+
 export default api

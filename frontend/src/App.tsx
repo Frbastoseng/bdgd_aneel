@@ -28,6 +28,8 @@ const AdminPage = lazy(() => import('@/pages/admin/AdminPage'))
 const AccessRequestsPage = lazy(() => import('@/pages/admin/AccessRequestsPage'))
 const UsersPage = lazy(() => import('@/pages/admin/UsersPage'))
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'))
+const CnpjPage = lazy(() => import('@/pages/CnpjPage'))
+const MatchingPage = lazy(() => import('@/pages/MatchingPage'))
 
 // Protected Route Component
 function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode; requireAdmin?: boolean }) {
@@ -74,6 +76,8 @@ function App() {
             <Route path="/consulta" element={<ConsultaPage />} />
             <Route path="/tarifas" element={<TarifasPage />} />
             <Route path="/mapa" element={<MapaPage />} />
+            <Route path="/cnpj" element={<CnpjPage />} />
+            <Route path="/matching" element={<MatchingPage />} />
             <Route path="/perfil" element={<ProfilePage />} />
           </Route>
           

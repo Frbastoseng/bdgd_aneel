@@ -7,15 +7,15 @@ services:
     container_name: bdgd_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DB_USER:-bdgd_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-BdGdSecure2026}
-      POSTGRES_DB: ${DB_NAME:-bdgd_aneel_prod}
+      POSTGRES_USER: ${DB_USER:-bdgd}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-bdgd_secret_2024}
+      POSTGRES_DB: ${DB_NAME:-bdgd_pro}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5434:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-bdgd_user} -d ${DB_NAME:-bdgd_aneel_prod}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-bdgd} -d ${DB_NAME:-bdgd_pro}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -55,8 +55,8 @@ services:
     environment:
       - APP_NAME=${APP_NAME:-BDGD Pro}
       - SECRET_KEY=${SECRET_KEY:-your-super-secret-key-change-in-production}
-      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-bdgd_user}:${DB_PASSWORD:-BdGdSecure2026}@db:${DB_PORT:-5432}/${DB_NAME:-bdgd_aneel_prod}
-      - DATABASE_URL_SYNC=postgresql://${DB_USER:-bdgd_user}:${DB_PASSWORD:-BdGdSecure2026}@db:${DB_PORT:-5432}/${DB_NAME:-bdgd_aneel_prod}
+      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-bdgd}:${DB_PASSWORD:-bdgd_secret_2024}@db:${DB_PORT:-5432}/${DB_NAME:-bdgd_pro}
+      - DATABASE_URL_SYNC=postgresql://${DB_USER:-bdgd}:${DB_PASSWORD:-bdgd_secret_2024}@db:${DB_PORT:-5432}/${DB_NAME:-bdgd_pro}
       - REDIS_URL=redis://redis:6379/0
       - CORS_ORIGINS=https://bdgd.btstech.com.br,http://localhost,http://localhost:80,http://localhost:3000,http://localhost:8080
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@bdgd.btstech.com.br}
@@ -100,9 +100,11 @@ services:
 
 volumes:
   postgres_data:
-    name: bdgd_aneel_postgres_data
+    name: bdgd-pro_postgres_data
+    external: true
   redis_data:
-    name: bdgd_aneel_redis_data
+    name: bdgd-pro_redis_data
+    external: true
 
 networks:
   bdgd_network:

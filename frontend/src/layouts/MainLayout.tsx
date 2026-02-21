@@ -17,6 +17,8 @@ import {
   ArrowRightOnRectangleIcon,
   SunIcon,
   MoonIcon,
+  BuildingOffice2Icon,
+  LinkIcon,
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 
@@ -25,6 +27,8 @@ const navigation = [
   { name: 'Consulta BDGD', href: '/consulta', icon: MagnifyingGlassIcon },
   { name: 'Tarifas', href: '/tarifas', icon: CurrencyDollarIcon },
   { name: 'Mapa', href: '/mapa', icon: MapIcon },
+  { name: 'Cadastro CNPJ', href: '/cnpj', icon: BuildingOffice2Icon },
+  { name: 'Matching CNPJ', href: '/matching', icon: LinkIcon },
 ]
 
 const adminNavigation = [

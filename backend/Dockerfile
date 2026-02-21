@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY alembic/ ./alembic/
 COPY alembic.ini .
-COPY .env .
+COPY .env* .
 COPY wait_for_db.py .
 COPY entrypoint_simple.sh /app/entrypoint.sh
 

@@ -1,0 +1,5 @@
+# Standalone CNPJ module dependencies
+sqlalchemy>=2.0
+psycopg2-binary
+python-dotenv
+httpx

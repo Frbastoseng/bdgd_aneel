@@ -230,3 +230,163 @@ export interface CriarConsultaSalva {
   filters: Record<string, unknown>
   query_type?: 'consulta' | 'mapa' | 'tarifas'
 }
+
+// Tipos CNPJ
+export interface SocioInfo {
+  nome: string
+  qualificacao: string
+}
+
+export interface SocioDetailInfo {
+  nome: string
+  qualificacao: string
+  codigo_qualificacao?: number | null
+  cnpj_cpf?: string | null
+  data_entrada_sociedade?: string | null
+  faixa_etaria?: string | null
+  identificador_de_socio?: number | null
+  pais?: string | null
+  nome_representante_legal?: string | null
+  qualificacao_representante_legal?: string | null
+}
+
+export interface CnaeSecundario {
+  codigo?: number | string | null
+  descricao?: string | null
+}
+
+export interface RegimeTributario {
+  ano?: number | null
+  forma_de_tributacao?: string | null
+  quantidade_de_escrituracoes?: number | null
+}
+
+export interface CnpjCacheItem {
+  id: number
+  cnpj: string
+  razao_social?: string | null
+  nome_fantasia?: string | null
+  situacao_cadastral?: string | null
+  cnae_fiscal_descricao?: string | null
+  municipio?: string | null
+  uf?: string | null
+  telefone_1?: string | null
+  email?: string | null
+  capital_social?: number | null
+  porte?: string | null
+  natureza_juridica?: string | null
+  data_inicio_atividade?: string | null
+  opcao_pelo_simples?: string | null
+  opcao_pelo_mei?: string | null
+  socios?: SocioInfo[] | null
+  data_consulta?: string | null
+  updated_at?: string | null
+  logradouro?: string | null
+  numero?: string | null
+  complemento?: string | null
+  bairro?: string | null
+  cep?: string | null
+}
+
+export interface CnpjCacheDetail extends CnpjCacheItem {
+  telefone_2?: string | null
+  cnaes_secundarios?: CnaeSecundario[] | null
+  cnae_fiscal?: string | null
+  data_situacao_cadastral?: string | null
+  motivo_situacao_cadastral?: string | null
+  descricao_tipo_logradouro?: string | null
+  identificador_matriz_filial?: string | null
+  data_opcao_pelo_simples?: string | null
+  data_exclusao_do_simples?: string | null
+  situacao_especial?: string | null
+  data_situacao_especial?: string | null
+  nome_cidade_exterior?: string | null
+  pais?: string | null
+  regime_tributario?: RegimeTributario[] | null
+  socios_detalhados?: SocioDetailInfo[] | null
+  data_consulta_formatada?: string | null
+}
+
+export interface CnpjCachePaginated {
+  data: CnpjCacheItem[]
+  total: number
+  page: number
+  per_page: number
+}
+
+export interface CnpjCacheStats {
+  total: number
+  ativas: number
+}
+
+export interface CnpjSearchItem {
+  cnpj: string
+  razao_social?: string | null
+  nome_fantasia?: string | null
+  municipio?: string | null
+  uf?: string | null
+  situacao_cadastral?: string | null
+}
+
+// Tipos Matching BDGD-CNPJ
+export interface MatchItem {
+  cnpj: string
+  rank: number
+  score_total: number
+  score_cep: number
+  score_cnae: number
+  score_endereco: number
+  score_numero: number
+  score_bairro: number
+  razao_social?: string | null
+  nome_fantasia?: string | null
+  cnpj_logradouro?: string | null
+  cnpj_numero?: string | null
+  cnpj_bairro?: string | null
+  cnpj_cep?: string | null
+  cnpj_municipio?: string | null
+  cnpj_uf?: string | null
+  cnpj_cnae?: string | null
+  cnpj_cnae_descricao?: string | null
+  cnpj_situacao?: string | null
+  cnpj_telefone?: string | null
+  cnpj_email?: string | null
+}
+
+export interface BdgdClienteComMatch {
+  cod_id: string
+  lgrd_original?: string | null
+  brr_original?: string | null
+  cep_original?: string | null
+  cnae_original?: string | null
+  municipio_nome?: string | null
+  uf?: string | null
+  clas_sub?: string | null
+  gru_tar?: string | null
+  dem_cont?: number | null
+  ene_max?: number | null
+  liv?: number | null
+  possui_solar?: boolean
+  point_x?: number | null
+  point_y?: number | null
+  matches: MatchItem[]
+  best_score?: number | null
+}
+
+export interface MatchingPaginated {
+  data: BdgdClienteComMatch[]
+  total: number
+  page: number
+  per_page: number
+}
+
+export interface MatchingStats {
+  total_clientes: number
+  clientes_com_match: number
+  clientes_sem_match: number
+  avg_score_top1?: number | null
+  alta_confianca: number
+  media_confianca: number
+  baixa_confianca: number
+  total_matches: number
+}

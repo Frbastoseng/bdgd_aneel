@@ -11,7 +11,7 @@ import logging
 from app.core.config import settings
 from app.core.database import init_db, close_db
 from app.core import database
-from app.api.routes import auth_router, admin_router, aneel_router
+from app.api.routes import auth_router, admin_router, aneel_router, cnpj_router, matching_router
 from app.services.auth_service import AuthService
 
 # Configurar logging com mais detalhes
@@ -151,6 +151,8 @@ async def general_exception_handler(request: Request, exc: Exception):
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(aneel_router, prefix="/api/v1")
+app.include_router(cnpj_router, prefix="/api/v1")
+app.include_router(matching_router, prefix="/api/v1")
 
 
 # Rotas de health check
