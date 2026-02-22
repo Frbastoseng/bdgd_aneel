@@ -38,6 +38,8 @@ async def consultar_dados_b3(
 ):
     """Consulta dados da BDGD B3 com filtros."""
     try:
+        from app.services.gd_client import buscar_multiplos_cegs
+
         dados, total = await B3Service.consultar_dados(filtros)
         total_pages = (total + filtros.per_page - 1) // filtros.per_page
 
@@ -89,6 +91,32 @@ async def consultar_dados_b3(
                 dat_con=str(d.get("DAT_CON", "")) if d.get("DAT_CON") else None,
             )
             clientes.append(cliente)
+
+        # Enriquecer com dados de Geração Distribuída
+        cegs = [c.ceg_gd for c in clientes if c.ceg_gd]
+        if cegs:
+            gd_data = await buscar_multiplos_cegs(cegs)
+            for cliente in clientes:
+                if cliente.ceg_gd and cliente.ceg_gd in gd_data:
+                    gd = gd_data[cliente.ceg_gd]
+                    if gd:  # dict não vazio
+                        gd_info = {
+                            "cod_empreendimento": gd.get("cod_empreendimento"),
+                            "tipo_geracao": gd.get("sig_tipo_geracao"),
+                            "fonte_geracao": gd.get("dsc_fonte_geracao"),
+                            "porte": gd.get("dsc_porte"),
+                            "potencia_instalada_kw": gd.get("potencia_instalada_kw"),
+                            "data_conexao": gd.get("dth_conexao_inicial"),
+                            "modalidade": gd.get("sig_modalidade"),
+                            "qtd_modulos": gd.get("qtd_modulos"),
+                            "agente": gd.get("sig_agente"),
+                            "nom_agente": gd.get("nom_agente"),
+                        }
+                        if gd.get("dados_tecnicos"):
+                            gd_info["dados_tecnicos"] = gd["dados_tecnicos"]
+                        cliente.geracao_distribuida = gd_info
+                        cliente.nome_real = gd.get("nom_titular")
+                        cliente.cnpj_real = gd.get("num_cpf_cnpj")
 
         return ConsultaB3Response(
             dados=clientes,

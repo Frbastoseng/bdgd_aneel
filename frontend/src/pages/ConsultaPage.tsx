@@ -21,6 +21,7 @@ import {
   EnvelopeIcon,
   LinkIcon,
   BuildingOffice2Icon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
 import {
   CheckCircleIcon,
@@ -82,9 +83,9 @@ function ScoreBar({ label, score, max }: { label: string; score: number; max: nu
   )
 }
 
-// Função para gerar link do Google Maps Street View
+// Função para gerar link do Google Maps Street View (API oficial)
 const getStreetViewUrl = (lat: number, lng: number) => {
-  return `https://www.google.com/maps/@${lat},${lng},3a,75y,90t/data=!3m6!1e1!3m4!1s!2e0!7i16384!8i8192?entry=ttu`
+  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}&heading=0&pitch=0&fov=90`
 }
 
 // Componente de card para visualização mobile
@@ -113,8 +114,24 @@ const MobileCard = memo(({ cliente, matchInfo }: { cliente: ClienteANEEL; matchI
         </span>
       </div>
 
-      {/* CNPJ Match Info */}
-      {matchInfo && (
+      {/* GD Real Info (when available) */}
+      {cliente.nome_real && (
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-2.5 space-y-1 border border-emerald-200 dark:border-emerald-800">
+          <div className="flex items-center justify-between">
+            {cliente.cnpj_real && <span className="text-xs font-mono text-emerald-700 dark:text-emerald-300">{formatCnpj(cliente.cnpj_real)}</span>}
+            <span className="inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:text-emerald-300">GD</span>
+          </div>
+          <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-200 truncate">{cliente.nome_real}</p>
+          {cliente.geracao_distribuida && (
+            <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
+              {cliente.geracao_distribuida.tipo_geracao} - {cliente.geracao_distribuida.potencia_instalada_kw?.toLocaleString('pt-BR')} kW - {cliente.geracao_distribuida.porte}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* CNPJ Match Info (fallback when no GD) */}
+      {!cliente.nome_real && matchInfo && (
         <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-2.5 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono text-purple-700 dark:text-purple-300">{formatCnpj(matchInfo.cnpj)}</span>
@@ -204,6 +221,7 @@ export default function ConsultaPage() {
   const [expandedCodId, setExpandedCodId] = useState<string | null>(null)
   const [expandedMatches, setExpandedMatches] = useState<MatchItem[] | null>(null)
   const [expandedLoading, setExpandedLoading] = useState(false)
+  const [tecnicoExpandedIds, setTecnicoExpandedIds] = useState<Set<string>>(new Set())
   const [refining, setRefining] = useState(false)
   const [refineResult, setRefineResult] = useState<{ refined: number; geocoded: number; improved: number } | null>(null)
   const [refiningCodId, setRefiningCodId] = useState<string | null>(null)
@@ -531,7 +549,9 @@ export default function ConsultaPage() {
       setMatchMap({})
       return
     }
-    const codIds = resultados.dados.map(c => c.cod_id).filter(Boolean) as string[]
+    const codIds = resultados.dados
+      .filter(c => c.cod_id && !c.nome_real)
+      .map(c => c.cod_id) as string[]
     if (codIds.length === 0) return
     setMatchLoading(true)
     matchingApi.batchLookup(codIds)
@@ -1184,14 +1204,22 @@ export default function ConsultaPage() {
                               {cliente.possui_solar ? '☀️' : '—'}
                             </span>
                           </td>
-                          <td className="px-2 py-1.5 text-xs font-mono text-purple-700 dark:text-purple-300 whitespace-nowrap">
-                            {mi ? formatCnpj(mi.cnpj) : matchLoading ? '...' : '—'}
+                          <td className="px-2 py-1.5 text-xs font-mono whitespace-nowrap">
+                            {cliente.cnpj_real ? (
+                              <span className="text-emerald-700 dark:text-emerald-300" title="CNPJ confirmado via GD">{formatCnpj(cliente.cnpj_real)}</span>
+                            ) : mi ? (
+                              <span className="text-purple-700 dark:text-purple-300">{formatCnpj(mi.cnpj)}</span>
+                            ) : matchLoading ? '...' : '—'}
                           </td>
                           <td className="px-2 py-1.5 text-xs text-gray-800 dark:text-gray-200 max-w-[160px] truncate">
-                            {mi?.razao_social || (matchLoading ? '...' : '—')}
+                            {cliente.nome_real ? (
+                              <span className="font-semibold text-emerald-700 dark:text-emerald-300" title="Nome confirmado via GD">{cliente.nome_real}</span>
+                            ) : mi?.razao_social || (matchLoading ? '...' : '—')}
                           </td>
                           <td className="px-2 py-1.5 text-center">
-                            {mi && <ScoreBadgeMini score={mi.score_total} />}
+                            {cliente.nome_real ? (
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:text-emerald-300" title="Identificado via Geração Distribuída">GD</span>
+                            ) : mi ? <ScoreBadgeMini score={mi.score_total} /> : null}
                           </td>
                           <td className="px-2 py-1.5 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1">
@@ -1244,6 +1272,119 @@ export default function ConsultaPage() {
                                       </div>
                                     </div>
                                   </div>
+
+                                  {/* Dados de Geração Distribuída */}
+                                  {cliente.geracao_distribuida && (
+                                    <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <h4 className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Geração Distribuída</h4>
+                                        {cliente.geracao_distribuida.dados_tecnicos && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              setTecnicoExpandedIds(prev => {
+                                                const next = new Set(prev)
+                                                if (next.has(codId)) next.delete(codId)
+                                                else next.add(codId)
+                                                return next
+                                              })
+                                            }}
+                                            className={clsx(
+                                              'inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md transition-colors',
+                                              tecnicoExpandedIds.has(codId)
+                                                ? 'bg-emerald-600 text-white'
+                                                : 'bg-emerald-100 dark:bg-emerald-800/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800/60'
+                                            )}
+                                            title="Ver detalhamento técnico da usina"
+                                          >
+                                            <WrenchScrewdriverIcon className="h-3.5 w-3.5" />
+                                            Dados Técnicos
+                                          </button>
+                                        )}
+                                      </div>
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                                        {cliente.nome_real && (
+                                          <div className="md:col-span-2"><span className="text-gray-500 dark:text-gray-400">Titular:</span> <span className="text-emerald-800 dark:text-emerald-200 font-semibold">{cliente.nome_real}</span></div>
+                                        )}
+                                        {cliente.cnpj_real && (
+                                          <div><span className="text-gray-500 dark:text-gray-400">CNPJ:</span> <span className="text-emerald-700 dark:text-emerald-300 font-mono">{formatCnpj(cliente.cnpj_real)}</span></div>
+                                        )}
+                                        <div><span className="text-gray-500 dark:text-gray-400">Tipo:</span> <span className="text-gray-900 dark:text-white font-semibold">{cliente.geracao_distribuida.tipo_geracao || '-'}</span></div>
+                                        <div><span className="text-gray-500 dark:text-gray-400">Fonte:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.fonte_geracao || '-'}</span></div>
+                                        <div><span className="text-gray-500 dark:text-gray-400">Porte:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.porte || '-'}</span></div>
+                                        <div><span className="text-gray-500 dark:text-gray-400">Potência:</span> <span className="text-emerald-700 dark:text-emerald-400 font-semibold">{cliente.geracao_distribuida.potencia_instalada_kw?.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kW</span></div>
+                                        <div><span className="text-gray-500 dark:text-gray-400">Módulos:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.qtd_modulos || '-'}</span></div>
+                                        <div><span className="text-gray-500 dark:text-gray-400">Modalidade:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.modalidade || '-'}</span></div>
+                                        {cliente.geracao_distribuida.data_conexao && (
+                                          <div><span className="text-gray-500 dark:text-gray-400">Conexão:</span> <span className="text-gray-900 dark:text-white">{new Date(cliente.geracao_distribuida.data_conexao).toLocaleDateString('pt-BR')}</span></div>
+                                        )}
+                                      </div>
+                                      {/* Dados Técnicos da Usina - Expandível */}
+                                      {cliente.geracao_distribuida.dados_tecnicos && tecnicoExpandedIds.has(codId) && (
+                                        <div className="mt-2 pt-2 border-t border-emerald-200 dark:border-emerald-800 animate-in fade-in slide-in-from-top-1 duration-200">
+                                          <h5 className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5 flex items-center gap-1">
+                                            <WrenchScrewdriverIcon className="h-3.5 w-3.5" />
+                                            Detalhamento Técnico ({cliente.geracao_distribuida.dados_tecnicos.tipo?.toUpperCase()})
+                                          </h5>
+                                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                                            {cliente.geracao_distribuida.dados_tecnicos.tipo === 'solar' && (<>
+                                              {cliente.geracao_distribuida.dados_tecnicos.nom_fabricante_modulo && (
+                                                <div className="md:col-span-2"><span className="text-gray-500 dark:text-gray-400">Módulo:</span> <span className="text-gray-900 dark:text-white font-medium">{cliente.geracao_distribuida.dados_tecnicos.nom_fabricante_modulo} {cliente.geracao_distribuida.dados_tecnicos.nom_modelo_modulo || ''}</span></div>
+                                              )}
+                                              {cliente.geracao_distribuida.dados_tecnicos.nom_fabricante_inversor && (
+                                                <div className="md:col-span-2"><span className="text-gray-500 dark:text-gray-400">Inversor:</span> <span className="text-gray-900 dark:text-white font-medium">{cliente.geracao_distribuida.dados_tecnicos.nom_fabricante_inversor} {cliente.geracao_distribuida.dados_tecnicos.nom_modelo_inversor || ''}</span></div>
+                                              )}
+                                              {cliente.geracao_distribuida.dados_tecnicos.mda_area_arranjo && (
+                                                <div><span className="text-gray-500 dark:text-gray-400">Área Arranjo:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.dados_tecnicos.mda_area_arranjo?.toLocaleString('pt-BR')} m²</span></div>
+                                              )}
+                                              {cliente.geracao_distribuida.dados_tecnicos.qtd_modulos && (
+                                                <div><span className="text-gray-500 dark:text-gray-400">Qtd Módulos:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.dados_tecnicos.qtd_modulos}</span></div>
+                                              )}
+                                              {cliente.geracao_distribuida.dados_tecnicos.mda_potencia_modulos && (
+                                                <div><span className="text-gray-500 dark:text-gray-400">Pot. Módulos:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.dados_tecnicos.mda_potencia_modulos?.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kW</span></div>
+                                              )}
+                                              {cliente.geracao_distribuida.dados_tecnicos.mda_potencia_inversores && (
+                                                <div><span className="text-gray-500 dark:text-gray-400">Pot. Inversores:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.dados_tecnicos.mda_potencia_inversores?.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kW</span></div>
+                                              )}
+                                            </>)}
+                                            {cliente.geracao_distribuida.dados_tecnicos.tipo === 'termica' && (<>
+                                              {cliente.geracao_distribuida.dados_tecnicos.dsc_ciclo_termodinamico && (
+                                                <div><span className="text-gray-500 dark:text-gray-400">Ciclo Termodinâmico:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.dados_tecnicos.dsc_ciclo_termodinamico}</span></div>
+                                              )}
+                                              {cliente.geracao_distribuida.dados_tecnicos.dsc_maquina_motriz && (
+                                                <div><span className="text-gray-500 dark:text-gray-400">Máquina Motriz:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.dados_tecnicos.dsc_maquina_motriz}</span></div>
+                                              )}
+                                            </>)}
+                                            {cliente.geracao_distribuida.dados_tecnicos.tipo === 'eolica' && (<>
+                                              {cliente.geracao_distribuida.dados_tecnicos.nom_fabricante_aerogerador && (
+                                                <div className="md:col-span-2"><span className="text-gray-500 dark:text-gray-400">Aerogerador:</span> <span className="text-gray-900 dark:text-white font-medium">{cliente.geracao_distribuida.dados_tecnicos.nom_fabricante_aerogerador} {cliente.geracao_distribuida.dados_tecnicos.dsc_modelo_aerogerador || ''}</span></div>
+                                              )}
+                                              {cliente.geracao_distribuida.dados_tecnicos.mda_altura_pa && (
+                                                <div><span className="text-gray-500 dark:text-gray-400">Altura Pá:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.dados_tecnicos.mda_altura_pa} m</span></div>
+                                              )}
+                                            </>)}
+                                            {cliente.geracao_distribuida.dados_tecnicos.tipo === 'hidraulica' && (<>
+                                              {cliente.geracao_distribuida.dados_tecnicos.nom_rio && (
+                                                <div><span className="text-gray-500 dark:text-gray-400">Rio:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.dados_tecnicos.nom_rio}</span></div>
+                                              )}
+                                              {cliente.geracao_distribuida.dados_tecnicos.mda_potencia_aparente && (
+                                                <div><span className="text-gray-500 dark:text-gray-400">Pot. Aparente:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.dados_tecnicos.mda_potencia_aparente} kVA</span></div>
+                                              )}
+                                              {cliente.geracao_distribuida.dados_tecnicos.mda_fator_potencia && (
+                                                <div><span className="text-gray-500 dark:text-gray-400">Fator de Potência:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.dados_tecnicos.mda_fator_potencia}</span></div>
+                                              )}
+                                              {cliente.geracao_distribuida.dados_tecnicos.mda_tensao && (
+                                                <div><span className="text-gray-500 dark:text-gray-400">Tensão:</span> <span className="text-gray-900 dark:text-white">{cliente.geracao_distribuida.dados_tecnicos.mda_tensao} kV</span></div>
+                                              )}
+                                            </>)}
+                                            {cliente.geracao_distribuida.dados_tecnicos.mda_potencia_instalada && (
+                                              <div><span className="text-gray-500 dark:text-gray-400">Pot. Técnica:</span> <span className="text-emerald-700 dark:text-emerald-400 font-semibold">{cliente.geracao_distribuida.dados_tecnicos.mda_potencia_instalada?.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kW</span></div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
 
                                   {/* Botão afinar este cliente */}
                                   <div className="flex items-center gap-2">

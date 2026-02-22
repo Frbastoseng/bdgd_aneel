@@ -184,17 +184,14 @@ function AreaSelector({
   )
 }
 
-// Abre o Google Maps com pin no ponto - usuário pode arrastar o boneco do Street View
-const getStreetViewUrl = (lat: number, lng: number) => {
-  // Abre o Maps com o ponto marcado, zoom 19, vista satélite
-  // O usuário pode facilmente arrastar o boneco amarelo para a rua mais próxima
-  return `https://www.google.com/maps/search/${lat},${lng}/@${lat},${lng},19z`
+// Abre o Google Maps com pin no ponto
+const getGoogleMapsUrl = (lat: number, lng: number) => {
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
 }
 
 // Abre diretamente em modo Street View na posição mais próxima disponível
-const getStreetViewDirectUrl = (lat: number, lng: number) => {
-  // Abre o Street View buscando cobertura próxima ao ponto
-  return `https://www.google.com/maps/@${lat},${lng},3a,75y,0h,90t/data=!3m4!1e1!3m2!1s!2e0`
+const getStreetViewUrl = (lat: number, lng: number) => {
+  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}&heading=0&pitch=0&fov=90`
 }
 
 // Função para obter ícone baseado no tipo do ponto
@@ -283,7 +280,7 @@ const MemoizedMarker = memo(({ ponto, matchInfo }: { ponto: PontoMapaCompleto; m
           {/* Links */}
           <div className="mt-2 pt-1 border-t flex gap-1 text-xs">
             <a
-              href={getStreetViewUrl(ponto.latitude, ponto.longitude)}
+              href={getGoogleMapsUrl(ponto.latitude, ponto.longitude)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex-1 text-center px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded transition-colors"
@@ -292,7 +289,7 @@ const MemoizedMarker = memo(({ ponto, matchInfo }: { ponto: PontoMapaCompleto; m
               📍 Maps
             </a>
             <a
-              href={getStreetViewDirectUrl(ponto.latitude, ponto.longitude)}
+              href={getStreetViewUrl(ponto.latitude, ponto.longitude)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex-1 text-center px-2 py-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded transition-colors"

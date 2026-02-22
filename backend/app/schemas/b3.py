@@ -122,6 +122,9 @@ class ClienteB3(BaseModel):
     # Geração distribuída
     ceg_gd: Optional[str] = None
     possui_solar: bool = False
+    geracao_distribuida: Optional[Dict[str, Any]] = None
+    nome_real: Optional[str] = None
+    cnpj_real: Optional[str] = None
 
     # Coordenadas
     latitude: Optional[float] = None

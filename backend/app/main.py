@@ -4,6 +4,7 @@ BDGD Pro - Aplicação Principal FastAPI
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 import logging
@@ -101,6 +102,9 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan
 )
+
+# Configurar GZip (comprimir respostas > 500 bytes - grande impacto em JSON de mapas)
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Configurar CORS
 app.add_middleware(

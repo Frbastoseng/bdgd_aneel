@@ -182,11 +182,11 @@ function AreaSelector({
   )
 }
 
-const getStreetViewUrl = (lat: number, lng: number) =>
-  `https://www.google.com/maps/search/${lat},${lng}/@${lat},${lng},19z`
+const getGoogleMapsUrl = (lat: number, lng: number) =>
+  `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
 
-const getStreetViewDirectUrl = (lat: number, lng: number) =>
-  `https://www.google.com/maps/@${lat},${lng},3a,75y,0h,90t/data=!3m4!1e1!3m2!1s!2e0`
+const getStreetViewUrl = (lat: number, lng: number) =>
+  `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}&heading=0&pitch=0&fov=90`
 
 // Funcao para obter icone baseado no tipo do ponto B3
 const getMarkerIconB3 = (ponto: PontoMapaB3) => {
@@ -321,7 +321,7 @@ const MemoizedMarkerB3 = memo(
             {/* Links */}
             <div className="mt-2 pt-1 border-t flex gap-1 text-xs">
               <a
-                href={getStreetViewUrl(ponto.latitude, ponto.longitude)}
+                href={getGoogleMapsUrl(ponto.latitude, ponto.longitude)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 text-center px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded transition-colors"
@@ -330,7 +330,7 @@ const MemoizedMarkerB3 = memo(
                 Maps
               </a>
               <a
-                href={getStreetViewDirectUrl(ponto.latitude, ponto.longitude)}
+                href={getStreetViewUrl(ponto.latitude, ponto.longitude)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 text-center px-2 py-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded transition-colors"

@@ -45,10 +45,12 @@ async def consultar_dados(
     Permite filtrar por UF, municípios, classes de cliente, grupos tarifários, etc.
     """
     try:
+        from app.services.gd_client import buscar_multiplos_cegs
+
         dados, total = await ANEELService.consultar_dados(filtros)
-        
+
         total_pages = (total + filtros.per_page - 1) // filtros.per_page
-        
+
         # Converter para schema
         clientes = []
         for d in dados:
@@ -72,7 +74,33 @@ async def consultar_dados(
                 longitude=d.get("POINT_X")
             )
             clientes.append(cliente)
-        
+
+        # Enriquecer com dados de Geração Distribuída
+        cegs = [c.ceg_gd for c in clientes if c.ceg_gd]
+        if cegs:
+            gd_data = await buscar_multiplos_cegs(cegs)
+            for cliente in clientes:
+                if cliente.ceg_gd and cliente.ceg_gd in gd_data:
+                    gd = gd_data[cliente.ceg_gd]
+                    if gd:  # dict não vazio
+                        gd_info = {
+                            "cod_empreendimento": gd.get("cod_empreendimento"),
+                            "tipo_geracao": gd.get("sig_tipo_geracao"),
+                            "fonte_geracao": gd.get("dsc_fonte_geracao"),
+                            "porte": gd.get("dsc_porte"),
+                            "potencia_instalada_kw": gd.get("potencia_instalada_kw"),
+                            "data_conexao": gd.get("dth_conexao_inicial"),
+                            "modalidade": gd.get("sig_modalidade"),
+                            "qtd_modulos": gd.get("qtd_modulos"),
+                            "agente": gd.get("sig_agente"),
+                            "nom_agente": gd.get("nom_agente"),
+                        }
+                        if gd.get("dados_tecnicos"):
+                            gd_info["dados_tecnicos"] = gd["dados_tecnicos"]
+                        cliente.geracao_distribuida = gd_info
+                        cliente.nome_real = gd.get("nom_titular")
+                        cliente.cnpj_real = gd.get("num_cpf_cnpj")
+
         return ConsultaResponse(
             dados=clientes,
             total=total,
@@ -80,7 +108,7 @@ async def consultar_dados(
             per_page=filtros.per_page,
             total_pages=total_pages
         )
-    
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -415,74 +443,86 @@ async def obter_pontos_mapa_avancado(
         df = df[df["CLAS_SUB"] == classe]
     
     total = len(df)
-    
+
     # Limitar resultados
     df = df.head(limit)
-    
-    # Converter para pontos
+
+    # Filtrar pontos com coordenadas válidas (vectorizado - muito mais rápido que iterrows)
+    import numpy as np
+    df_valid = df.copy()
+    if "POINT_Y" in df_valid.columns and "POINT_X" in df_valid.columns:
+        df_valid = df_valid[
+            df_valid["POINT_Y"].notna() & df_valid["POINT_X"].notna() &
+            (df_valid["POINT_Y"] != 0) & (df_valid["POINT_X"] != 0)
+        ]
+    else:
+        df_valid = df_valid.iloc[0:0]
+
+    # Calcular consumo médio vectorizado
+    ene_cols = [f"ENE_{str(i).zfill(2)}" for i in range(1, 13)]
+    ene_cols_existem = [c for c in ene_cols if c in df_valid.columns]
+    if ene_cols_existem:
+        df_valid = df_valid.copy()
+        df_valid["_consumo_medio"] = df_valid[ene_cols_existem].fillna(0).mean(axis=1).round(2)
+    else:
+        df_valid = df_valid.copy()
+        df_valid["_consumo_medio"] = 0.0
+
+    # Converter para lista de pontos via to_dict (10-100x mais rápido que iterrows)
+    records = df_valid.to_dict("records")
     pontos = []
-    for idx, row in df.iterrows():
+    for rec in records:
         try:
-            lat = float(row.get("POINT_Y", 0))
-            lng = float(row.get("POINT_X", 0))
-            
-            if lat == 0 or lng == 0:
-                continue
-            
-            # Calcular consumo médio
-            ene_cols = [f"ENE_{str(i).zfill(2)}" for i in range(1, 13)]
-            consumos = [float(row.get(c, 0) or 0) for c in ene_cols if c in row]
-            consumo_medio = sum(consumos) / len(consumos) if consumos else 0
-            
-            ponto = PontoMapaCompleto(
-                id=str(row.get("COD_ID_ENCR", idx)),
-                latitude=lat,
-                longitude=lng,
-                cod_id=str(row.get("COD_ID_ENCR", "")),
-                titulo=str(row.get("Nome_Município", "") or row.get("COD_ID_ENCR", "")),
-                tipo_consumidor="livre" if row.get("LIV") == 1 else "cativo",
-                classe=CLAS_SUB_MAP.get(str(row.get("CLAS_SUB", "")), str(row.get("CLAS_SUB", ""))),
-                grupo_tarifario=str(row.get("GRU_TAR", "")),
-                municipio=str(row.get("Nome_Município", "")),
-                uf=str(row.get("Nome_UF", "")),
-                demanda=float(row.get("DEM_CONT", 0) or 0),
-                demanda_contratada=float(row.get("DEM_CONT", 0) or 0),
-                consumo_medio=round(consumo_medio, 2),
-                consumo_max=float(row.get("ENE_MAX", 0) or 0),
-                carga_instalada=float(row.get("CAR_INST", 0) or 0),
-                possui_solar=bool(row.get("POSSUI_SOLAR", False))
-            )
-            pontos.append(ponto)
+            cod_id = str(rec.get("COD_ID_ENCR", ""))
+            pontos.append(PontoMapaCompleto(
+                id=cod_id or str(len(pontos)),
+                latitude=float(rec["POINT_Y"]),
+                longitude=float(rec["POINT_X"]),
+                cod_id=cod_id,
+                titulo=str(rec.get("Nome_Município", "") or cod_id),
+                tipo_consumidor="livre" if rec.get("LIV") == 1 else "cativo",
+                classe=CLAS_SUB_MAP.get(str(rec.get("CLAS_SUB", "")), str(rec.get("CLAS_SUB", ""))),
+                grupo_tarifario=str(rec.get("GRU_TAR", "")),
+                municipio=str(rec.get("Nome_Município", "")),
+                uf=str(rec.get("Nome_UF", "")),
+                demanda=float(rec.get("DEM_CONT", 0) or 0),
+                demanda_contratada=float(rec.get("DEM_CONT", 0) or 0),
+                consumo_medio=float(rec.get("_consumo_medio", 0)),
+                consumo_max=float(rec.get("ENE_MAX", 0) or 0),
+                carga_instalada=float(rec.get("CAR_INST", 0) or 0),
+                possui_solar=bool(rec.get("POSSUI_SOLAR", False))
+            ))
         except Exception:
             continue
-    
-    # Calcular centro
+
+    # Calcular centro e estatísticas via numpy (vectorizado)
     if pontos:
-        lats = [p.latitude for p in pontos]
-        lngs = [p.longitude for p in pontos]
-        centro = {
-            "lat": sum(lats) / len(lats),
-            "lng": sum(lngs) / len(lngs)
-        }
+        lats = df_valid["POINT_Y"].astype(float)
+        lngs = df_valid["POINT_X"].astype(float)
+        centro = {"lat": float(lats.mean()), "lng": float(lngs.mean())}
     else:
         centro = {"lat": -15.7801, "lng": -47.9292}
-    
-    # Estatísticas rápidas
-    demandas = [p.demanda or 0 for p in pontos if p.demanda]
+
+    n_pontos = len(pontos)
+    n_solar = int(df_valid["POSSUI_SOLAR"].sum()) if "POSSUI_SOLAR" in df_valid.columns else 0
+    n_livres = int((df_valid["LIV"] == 1).sum()) if "LIV" in df_valid.columns else 0
+    n_cativos = int((df_valid["LIV"] == 0).sum()) if "LIV" in df_valid.columns else 0
+    dem_media = float(df_valid["DEM_CONT"].mean()) if "DEM_CONT" in df_valid.columns and not df_valid["DEM_CONT"].isna().all() else 0
+
     estatisticas = {
-        "total_pontos": len(pontos),
+        "total_pontos": n_pontos,
         "total_base": total,
-        "com_solar": sum(1 for p in pontos if p.possui_solar),
-        "livres": sum(1 for p in pontos if p.tipo_consumidor == "livre"),
-        "cativos": sum(1 for p in pontos if p.tipo_consumidor == "cativo"),
-        "demanda_media": round(sum(demandas) / len(demandas), 2) if demandas else 0,
+        "com_solar": n_solar,
+        "livres": n_livres,
+        "cativos": n_cativos,
+        "demanda_media": round(dem_media, 2),
     }
-    
+
     return MapaAvancadoResponse(
         pontos=pontos,
         total=total,
         centro=centro,
-        zoom=10 if len(pontos) < 500 else 8,
+        zoom=10 if n_pontos < 500 else 8,
         estatisticas=estatisticas
     )
 

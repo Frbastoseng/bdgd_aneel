@@ -69,6 +69,7 @@ services:
       - "8000:8000"
     networks:
       - bdgd_network
+      - gd_network
     # healthcheck desabilitado para evitar reinicializações durante debug
     # healthcheck:
     #   test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
@@ -110,3 +111,5 @@ networks:
   bdgd_network:
     name: bdgd_network
     driver: bridge
+  gd_network:
+    external: true

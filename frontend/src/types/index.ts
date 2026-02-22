@@ -82,6 +82,45 @@ export interface ClienteANEEL {
   ene_max?: number
   ceg_gd?: string
   possui_solar?: boolean
+  geracao_distribuida?: {
+    cod_empreendimento?: string
+    tipo_geracao?: string
+    fonte_geracao?: string
+    porte?: string
+    potencia_instalada_kw?: number
+    data_conexao?: string
+    modalidade?: string
+    qtd_modulos?: number
+    agente?: string
+    nom_agente?: string
+    dados_tecnicos?: {
+      tipo?: string
+      mda_potencia_instalada?: number
+      // Solar
+      nom_fabricante_modulo?: string
+      nom_modelo_modulo?: string
+      nom_fabricante_inversor?: string
+      nom_modelo_inversor?: string
+      mda_area_arranjo?: number
+      qtd_modulos?: number
+      mda_potencia_modulos?: number
+      mda_potencia_inversores?: number
+      // Termica
+      dsc_ciclo_termodinamico?: string
+      dsc_maquina_motriz?: string
+      // Eolica
+      nom_fabricante_aerogerador?: string
+      dsc_modelo_aerogerador?: string
+      mda_altura_pa?: number
+      // Hidraulica
+      nom_rio?: string
+      mda_potencia_aparente?: number
+      mda_fator_potencia?: number
+      mda_tensao?: number
+    }
+  }
+  nome_real?: string
+  cnpj_real?: string
   point_x?: number
   point_y?: number
   latitude?: number
@@ -465,6 +504,41 @@ export interface ClienteB3 {
   fic_anual?: number
   ceg_gd?: string
   possui_solar?: boolean
+  geracao_distribuida?: {
+    cod_empreendimento?: string
+    tipo_geracao?: string
+    fonte_geracao?: string
+    porte?: string
+    potencia_instalada_kw?: number
+    data_conexao?: string
+    modalidade?: string
+    qtd_modulos?: number
+    agente?: string
+    nom_agente?: string
+    dados_tecnicos?: {
+      tipo?: string
+      mda_potencia_instalada?: number
+      nom_fabricante_modulo?: string
+      nom_modelo_modulo?: string
+      nom_fabricante_inversor?: string
+      nom_modelo_inversor?: string
+      mda_area_arranjo?: number
+      qtd_modulos?: number
+      mda_potencia_modulos?: number
+      mda_potencia_inversores?: number
+      dsc_ciclo_termodinamico?: string
+      dsc_maquina_motriz?: string
+      nom_fabricante_aerogerador?: string
+      dsc_modelo_aerogerador?: string
+      mda_altura_pa?: number
+      nom_rio?: string
+      mda_potencia_aparente?: number
+      mda_fator_potencia?: number
+      mda_tensao?: number
+    }
+  }
+  nome_real?: string
+  cnpj_real?: string
   latitude?: number
   longitude?: number
   dat_con?: string

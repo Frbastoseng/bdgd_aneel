@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     ANEEL_API_URL: str = "https://dadosabertos.aneel.gov.br/api/3/action/datastore_search"
     ANEEL_RESOURCE_ID: str = "f6671cba-f269-42ef-8eb3-62cb3bfa0b98"
     ANEEL_TARIFAS_RESOURCE_ID: str = "fcf2906c-7c32-4b9b-a637-054e7a5234f4"
+
+    # API GD (Geração Distribuída) - microserviço separado
+    GD_API_URL: str = os.getenv("GD_API_URL", "http://gd_backend:8001")
     
     @property
     def allowed_origins_list(self) -> List[str]:

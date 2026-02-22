@@ -1,0 +1,53 @@
+services:
+  # PostgreSQL Database para Geração Distribuída
+  gd_db:
+    image: postgres:15-alpine
+    container_name: gd_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${GD_DB_USER:-gd_user}
+      POSTGRES_PASSWORD: ${GD_DB_PASSWORD:-GdAneel2026Secure}
+      POSTGRES_DB: ${GD_DB_NAME:-gd_aneel}
+    volumes:
+      - gd_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${GD_DB_USER:-gd_user} -d ${GD_DB_NAME:-gd_aneel}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gd_network
+
+  # FastAPI Backend - GD ANEEL
+  gd_backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gd_backend
+    restart: unless-stopped
+    depends_on:
+      gd_db:
+        condition: service_healthy
+    environment:
+      - APP_NAME=GD ANEEL
+      - DATABASE_URL=postgresql+asyncpg://${GD_DB_USER:-gd_user}:${GD_DB_PASSWORD:-GdAneel2026Secure}@gd_db:5432/${GD_DB_NAME:-gd_aneel}
+      - DATABASE_URL_SYNC=postgresql://${GD_DB_USER:-gd_user}:${GD_DB_PASSWORD:-GdAneel2026Secure}@gd_db:5432/${GD_DB_NAME:-gd_aneel}
+      - DEBUG=${DEBUG:-false}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080,http://localhost:8001
+    ports:
+      - "8001:8001"
+    networks:
+      - gd_network
+
+volumes:
+  gd_postgres_data:
+    name: gd_postgres_data
+    external: true
+
+networks:
+  gd_network:
+    name: gd_network
+    driver: bridge

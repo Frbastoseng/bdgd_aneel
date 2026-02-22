@@ -368,50 +368,58 @@ class B3Service:
         total = len(df)
         df = df.head(limit)
 
-        all_clas_map = {**CLAS_SUB_MAP, **CLAS_SUB_B3_MAP}
-        pontos = []
-        for idx, row in df.iterrows():
-            try:
-                lat = float(row.get("POINT_Y", 0))
-                lng = float(row.get("POINT_X", 0))
-                if lat == 0 or lng == 0:
-                    continue
+        # Filtrar coordenadas válidas (vectorizado - muito mais rápido que iterrows)
+        df_valid = df[
+            df["POINT_Y"].notna() & df["POINT_X"].notna() &
+            (df["POINT_Y"] != 0) & (df["POINT_X"] != 0)
+        ]
 
-                ponto = PontoMapaB3(
-                    id=str(row.get("COD_ID_ENCR", idx)),
-                    latitude=lat,
-                    longitude=lng,
-                    cod_id=str(row.get("COD_ID_ENCR", "")),
-                    titulo=str(row.get("Nome_Município", "") or row.get("COD_ID_ENCR", "")),
-                    classe=all_clas_map.get(str(row.get("CLAS_SUB", "")), str(row.get("CLAS_SUB", ""))),
-                    grupo_tarifario=str(row.get("GRU_TAR", "")),
-                    fas_con=str(row.get("FAS_CON", "")),
-                    municipio=str(row.get("Nome_Município", "")),
-                    uf=str(row.get("Nome_UF", "")),
-                    consumo_medio=round(float(row.get("CONSUMO_MEDIO", 0) or 0), 2),
-                    consumo_anual=round(float(row.get("CONSUMO_ANUAL", 0) or 0), 2),
-                    carga_instalada=float(row.get("CAR_INST", 0) or 0),
-                    dic_anual=round(float(row.get("DIC_ANUAL", 0) or 0), 2),
-                    fic_anual=round(float(row.get("FIC_ANUAL", 0) or 0), 2),
-                    possui_solar=bool(row.get("POSSUI_SOLAR", False))
-                )
-                pontos.append(ponto)
+        all_clas_map = {**CLAS_SUB_MAP, **CLAS_SUB_B3_MAP}
+
+        # Converter via to_dict (10-100x mais rápido que iterrows)
+        records = df_valid.to_dict("records")
+        pontos = []
+        for rec in records:
+            try:
+                cod_id = str(rec.get("COD_ID_ENCR", ""))
+                pontos.append(PontoMapaB3(
+                    id=cod_id or str(len(pontos)),
+                    latitude=float(rec["POINT_Y"]),
+                    longitude=float(rec["POINT_X"]),
+                    cod_id=cod_id,
+                    titulo=str(rec.get("Nome_Município", "") or cod_id),
+                    classe=all_clas_map.get(str(rec.get("CLAS_SUB", "")), str(rec.get("CLAS_SUB", ""))),
+                    grupo_tarifario=str(rec.get("GRU_TAR", "")),
+                    fas_con=str(rec.get("FAS_CON", "")),
+                    municipio=str(rec.get("Nome_Município", "")),
+                    uf=str(rec.get("Nome_UF", "")),
+                    consumo_medio=round(float(rec.get("CONSUMO_MEDIO", 0) or 0), 2),
+                    consumo_anual=round(float(rec.get("CONSUMO_ANUAL", 0) or 0), 2),
+                    carga_instalada=float(rec.get("CAR_INST", 0) or 0),
+                    dic_anual=round(float(rec.get("DIC_ANUAL", 0) or 0), 2),
+                    fic_anual=round(float(rec.get("FIC_ANUAL", 0) or 0), 2),
+                    possui_solar=bool(rec.get("POSSUI_SOLAR", False))
+                ))
             except Exception:
                 continue
 
-        # Centro
+        # Centro e estatísticas via pandas vectorizado
         if pontos:
-            lats = [p.latitude for p in pontos]
-            lngs = [p.longitude for p in pontos]
-            centro = {"lat": sum(lats) / len(lats), "lng": sum(lngs) / len(lngs)}
+            centro = {
+                "lat": float(df_valid["POINT_Y"].astype(float).mean()),
+                "lng": float(df_valid["POINT_X"].astype(float).mean()),
+            }
         else:
             centro = {"lat": -15.7801, "lng": -47.9292}
+
+        n_solar = int(df_valid["POSSUI_SOLAR"].sum()) if "POSSUI_SOLAR" in df_valid.columns else 0
+        consumo_total = float(df_valid["CONSUMO_MEDIO"].fillna(0).sum()) if "CONSUMO_MEDIO" in df_valid.columns else 0.0
 
         estatisticas = {
             "total_pontos": len(pontos),
             "total_base": total,
-            "com_solar": sum(1 for p in pontos if p.possui_solar),
-            "consumo_medio_total": round(sum(p.consumo_medio or 0 for p in pontos), 2),
+            "com_solar": n_solar,
+            "consumo_medio_total": round(consumo_total, 2),
         }
 
         return {

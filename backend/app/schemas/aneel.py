@@ -101,13 +101,16 @@ class ClienteANEEL(BaseModel):
     # Geração distribuída
     ceg_gd: Optional[str] = None
     possui_solar: bool = False
-    
+    geracao_distribuida: Optional[Dict[str, Any]] = None
+    nome_real: Optional[str] = None
+    cnpj_real: Optional[str] = None
+
     # Coordenadas
     point_x: Optional[float] = None
     point_y: Optional[float] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    
+
     class Config:
         from_attributes = True
 
